@@ -74,6 +74,7 @@ class CommandRouter:
 class FeishuGateway:
     router: CommandRouter
     transport: FeishuTransport
+    record_event: bool = True
 
     def on_text_message(self, text: str) -> str:
         response = self.router.handle(text)
@@ -81,9 +82,11 @@ class FeishuGateway:
         return response
 
     def notify_major_event(self, event: MajorEvent) -> str:
-        self.router.store.add_event(event)
+        if self.record_event:
+            self.router.store.add_event(event)
         if event.requires_decision:
-            self.router.watchdog.pause("major event requires user decision")
+            if not self.router.store.get_runtime("paused", False):
+                self.router.watchdog.pause("major event requires user decision")
             self.router.store.set_runtime(
                 "pending_decision",
                 {"event_id": event.id, "title": event.title, "status": "pending"},

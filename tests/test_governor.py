@@ -18,7 +18,7 @@ from ai_governor.loop import CompositeObservationSource, GovernorLoop
 from ai_governor.config import Settings
 from ai_governor.deepseek import DeepSeekClient, DeepSeekRequestError
 from ai_governor.e2e import BuildMenuE2EHarness, E2EConfigurationError
-from ai_governor.events import MajorEventDetector
+from ai_governor.events import MajorEventCoordinator, MajorEventDetector
 from ai_governor.feishu import CommandRouter, NullFeishuTransport, FeishuGateway
 from ai_governor.feishu_http import FeishuApiClient, FeishuEventHandler, FeishuHttpTransport, FeishuPayloadCipher
 from ai_governor.governor import Governor
@@ -432,6 +432,22 @@ def test_decision_resume_command_cannot_bypass_pending_event(store: SQLiteStore)
     assert store.get_runtime("paused") is True
 
 
+def test_major_event_coordinator_pauses_without_feishu(store: SQLiteStore) -> None:
+    watchdog = Watchdog(store)
+    coordinator = MajorEventCoordinator(MajorEventDetector(store), store, watchdog)
+    event = coordinator.handle([
+        Observation(
+            {"events": [{"title": "粮食危机", "body": "粮食即将耗尽", "severity": "critical"}]},
+            source="deepseek-vision",
+            region="events",
+        )
+    ])[0]
+    assert event.requires_decision is True
+    assert store.get_runtime("paused") is True
+    assert store.get_runtime("pending_decision")["status"] == "pending"
+    assert store.recent_events(1)[0]["title"] == "粮食危机"
+
+
 def test_major_event_screenshot_is_sent_before_text(store: SQLiteStore, tmp_path: Path) -> None:
     screenshot = tmp_path / "event.png"
     screenshot.write_bytes(b"png")
@@ -605,7 +621,11 @@ def test_perception_uses_task_region() -> None:
 def test_perception_normalizes_valid_ui_elements() -> None:
     class Analyzer(FakeAnalyzer):
         def analyze_image_json(self, image, prompt, *, model=None):
-            return {"ui_elements": [{"id": "build", "label": "建造", "bbox": [0.1, 0.2, 0.3, 0.4]}]}
+            return {
+                "build_menu_open": True,
+                "current_screen": "build_menu",
+                "ui_elements": [{"id": "build", "label": "建造", "bbox": [0.1, 0.2, 0.3, 0.4]}],
+            }
 
     observation = PerceptionEngine(Analyzer(), RegionCatalog()).observe(b"frame", "build_menu")
     assert observation.data["ui_elements"][0]["id"] == "build"
@@ -616,10 +636,33 @@ def test_perception_normalizes_valid_ui_elements() -> None:
 def test_perception_rejects_invalid_ui_element_bbox() -> None:
     class Analyzer(FakeAnalyzer):
         def analyze_image_json(self, image, prompt, *, model=None):
-            return {"ui_elements": [{"id": "build", "bbox": [0.8, 0.2, 0.3, 0.4]}]}
+            return {
+                "build_menu_open": True,
+                "current_screen": "build_menu",
+                "ui_elements": [{"id": "build", "bbox": [0.8, 0.2, 0.3, 0.4]}],
+            }
 
     with pytest.raises(ValueError, match="normalized coordinates"):
         PerceptionEngine(Analyzer(), RegionCatalog()).observe(b"frame", "build_menu")
+
+
+def test_perception_rejects_missing_build_menu_semantic_schema() -> None:
+    class Analyzer(FakeAnalyzer):
+        def analyze_image_json(self, image, prompt, *, model=None):
+            return {"ui_elements": []}
+
+    with pytest.raises(ValueError, match="build_menu_open"):
+        PerceptionEngine(Analyzer(), RegionCatalog()).observe(b"frame", "build_menu")
+
+
+def test_perception_requires_dialog_semantic_schema() -> None:
+    class Analyzer(FakeAnalyzer):
+        def analyze_image_json(self, image, prompt, *, model=None):
+            return {"dialog_open": True, "current_screen": "dialog", "options": []}
+
+    observation = PerceptionEngine(Analyzer(), RegionCatalog()).observe(b"frame", "dialog")
+    assert observation.data["dialog_open"] is True
+    assert observation.data["options"] == []
 
 
 def test_perception_crops_rgba_before_analysis() -> None:

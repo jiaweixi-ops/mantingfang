@@ -30,6 +30,8 @@
 - A module-only Feishu notifier was insufficient for the requested behavior. Runtime now parses structured event facts from observations before strategy execution, deduplicates them against persisted events, captures the latest client frame, and either sends through the configured Feishu gateway or records an explicit audit when notification credentials are absent.
 - Exact RGBA hashing was too sensitive for animated maps. The cache now uses deterministic grayscale sampling and normalized mean absolute difference thresholds; this reduces avoidable Vision calls without removing the periodic force-refresh safety net.
 - The E2E harness is intentionally separate from the normal `run` loop. It refuses dry-run, missing arming, missing semantic verification, or absent explicit confirmation, and stops at the first failed open/close action; no live E2E was run in this environment.
+- Latest acceptance identified a safety gap: when Feishu credentials are absent, runtime event handling recorded events but did not pause on `requires_decision`; pause and pending-decision persistence must belong to a runtime event coordinator, while Feishu remains an optional notifier.
+- Build-menu/dialog E2E depends on semantic fields that generic Vision output did not previously require. The perception boundary must validate `build_menu_open`/`dialog_open`, `current_screen`, and dialog `options` before observations reach strategy or live verification.
 
 - Use Python 3.11+ with a standard-library-first core to keep local/offline setup portable.
 - Use SQLite for durable local state and an append-only audit trail.

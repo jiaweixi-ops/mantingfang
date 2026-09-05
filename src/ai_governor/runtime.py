@@ -9,7 +9,7 @@ from .actions import ActionEngine, DryRunExecutor
 from .capture import CapturedFrame, ClientAreaCapture, Win32ClientCaptureBackend
 from .config import Settings
 from .deepseek import DeepSeekClient, DeepSeekConfigurationError
-from .events import MajorEventDetector
+from .events import MajorEventCoordinator, MajorEventDetector
 from .feishu import CommandRouter, FeishuGateway
 from .feishu_http import FeishuApiClient, FeishuHttpTransport
 from .governor import Governor
@@ -162,28 +162,30 @@ def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str]
             observe_state()
         return latest_ui_elements.get((region_name, element_id))
 
-    detector = MajorEventDetector(store)
     gateway: FeishuGateway | None = None
     if settings.feishu_app_id and settings.feishu_app_secret and settings.feishu_target_chat_id:
         feishu_client = FeishuApiClient(settings.feishu_app_id, settings.feishu_app_secret, settings.feishu_api_base)
         gateway = FeishuGateway(
             CommandRouter(store, ReportService(store), watchdog),
             FeishuHttpTransport(feishu_client, settings.feishu_target_chat_id),
+            record_event=False,
         )
 
-    def handle_major_events(observations) -> None:
-        for event in detector.detect(observations):
-            screenshot_path: Path | None = None
-            if vision_source.last_frame is not None:
-                screenshot_path = settings.db_path.parent / "screenshots" / f"major-event-{event.id}.png"
-                screenshot_path.parent.mkdir(parents=True, exist_ok=True)
-                screenshot_path.write_bytes(vision_source.last_frame.png)
-            event_with_screenshot = replace(event, screenshot_path=str(screenshot_path) if screenshot_path else None)
-            if gateway is not None:
-                gateway.notify_major_event(event_with_screenshot)
-            else:
-                store.add_event(event_with_screenshot)
-                store.audit("feishu", "major event recorded without configured notification", {"event_id": event.id})
+    def enrich_major_event(event):
+        screenshot_path: Path | None = None
+        if vision_source.last_frame is not None:
+            screenshot_path = settings.db_path.parent / "screenshots" / f"major-event-{event.id}.png"
+            screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+            screenshot_path.write_bytes(vision_source.last_frame.png)
+        return replace(event, screenshot_path=str(screenshot_path) if screenshot_path else None)
+
+    event_coordinator = MajorEventCoordinator(
+        MajorEventDetector(store),
+        store,
+        watchdog,
+        notify=gateway.notify_major_event if gateway is not None else None,
+        enrich=enrich_major_event,
+    )
 
     if settings.execution_mode == "dry-run":
         executor = DryRunExecutor()
@@ -213,7 +215,7 @@ def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str]
         watchdog,
         model=settings.deepseek_reasoning_model,
         state_aggregator=aggregator,
-        major_event_handler=handle_major_events,
+        major_event_handler=event_coordinator.handle,
     )
     loop = GovernorLoop(source, governor, store, watchdog)
     return GovernorRuntime(loop=loop, source=source, governor=governor)

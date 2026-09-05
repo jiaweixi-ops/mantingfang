@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from .models import MajorEvent, Observation, RiskLevel
 from .storage import SQLiteStore
+from .watchdog import Watchdog
 
 
 @dataclass
@@ -60,3 +61,37 @@ class MajorEventDetector:
             severity=severity,
             requires_decision=requires_decision,
         )
+
+
+@dataclass
+class MajorEventCoordinator:
+    """Persist and gate major events before optional external notification."""
+
+    detector: MajorEventDetector
+    store: SQLiteStore
+    watchdog: Watchdog
+    notify: Callable[[MajorEvent], Any] | None = None
+    enrich: Callable[[MajorEvent], MajorEvent] | None = None
+
+    def handle(self, observations: Iterable[Observation]) -> list[MajorEvent]:
+        handled: list[MajorEvent] = []
+        for event in self.detector.detect(observations):
+            if self.enrich is not None:
+                event = self.enrich(event)
+            if event.requires_decision:
+                self.watchdog.pause("major event requires user decision")
+                self.store.set_runtime(
+                    "pending_decision",
+                    {"event_id": event.id, "title": event.title, "status": "pending"},
+                )
+            self.store.add_event(event)
+            if self.notify is not None:
+                self.notify(event)
+            else:
+                self.store.audit(
+                    "feishu",
+                    "major event recorded without configured notification",
+                    {"event_id": event.id},
+                )
+            handled.append(event)
+        return handled

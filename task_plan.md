@@ -126,4 +126,6 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Add an explicitly gated E2E-001 build-menu harness with 100-cycle metrics and fail-closed stop behavior.
 - [x] Add Feishu screenshot upload and explicit remote decision reply handling.
 - [x] Add CI for the source-level safety and integration checks.
+- [x] Move major-event pause and pending-decision persistence into a runtime coordinator independent of Feishu availability.
+- [x] Enforce semantic Vision fields for `build_menu` and `dialog` regions, with regression tests.
 - [ ] Add a separately gated real Steam E2E harness; real E2E remains unverified until the game is running with calibrated UI/profile data.

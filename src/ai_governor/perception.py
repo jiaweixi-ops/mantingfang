@@ -71,6 +71,17 @@ class PerceptionEngine:
         )
 
     def _analyze(self, frame: bytes, region: RegionSpec, *, context: str, crop_box: tuple[int, int, int, int] | None) -> Observation:
+        schema_instruction = ""
+        if region.name == "build_menu":
+            schema_instruction = (
+                "本区域必须额外返回 build_menu_open 布尔值和非空 current_screen 字符串；"
+                "build_menu_open 表示建筑菜单当前是否可见。"
+            )
+        elif region.name == "dialog":
+            schema_instruction = (
+                "本区域必须额外返回 dialog_open 布尔值、非空 current_screen 字符串和 options 数组；"
+                "dialog_open 表示弹窗当前是否可见；没有选项时 options 必须返回空数组。"
+            )
         prompt = (
             f"任务上下文：{context or '读取当前区域状态'}\n"
             f"关注区域：{region.name}\n{region.focus_instruction}\n"
@@ -78,8 +89,10 @@ class PerceptionEngine:
             "如果看见可操作控件，额外返回 ui_elements 数组；每项必须是"
             "{id: string, label: string, bbox: [left, top, right, bottom]}，"
             "bbox 是相对于当前裁剪图的 0 到 1 归一化坐标，不要猜测不可见控件。"
+            f"{schema_instruction}"
         )
         result = self.analyzer.analyze_image_json(frame, prompt, model=self.model)
+        self._validate_region_schema(result, region)
         result = self._normalize_ui_elements(result, region)
         confidence = result.get("confidence")
         if confidence is not None and not isinstance(confidence, (int, float)):
@@ -87,6 +100,23 @@ class PerceptionEngine:
         if crop_box is not None:
             result = {**result, "crop_box": crop_box}
         return Observation(data=result, source="deepseek-vision", region=region.name, confidence=confidence)
+
+    @staticmethod
+    def _validate_region_schema(result: dict[str, Any], region: RegionSpec) -> None:
+        if region.name == "build_menu":
+            if not isinstance(result.get("build_menu_open"), bool):
+                raise ValueError("build_menu vision schema requires boolean build_menu_open")
+            current_screen = result.get("current_screen")
+            if not isinstance(current_screen, str) or not current_screen.strip():
+                raise ValueError("build_menu vision schema requires non-empty current_screen")
+        elif region.name == "dialog":
+            if not isinstance(result.get("dialog_open"), bool):
+                raise ValueError("dialog vision schema requires boolean dialog_open")
+            current_screen = result.get("current_screen")
+            if not isinstance(current_screen, str) or not current_screen.strip():
+                raise ValueError("dialog vision schema requires non-empty current_screen")
+            if not isinstance(result.get("options"), list):
+                raise ValueError("dialog vision schema requires options list")
 
     @staticmethod
     def _normalize_ui_elements(result: dict[str, Any], region: RegionSpec) -> dict[str, Any]:
