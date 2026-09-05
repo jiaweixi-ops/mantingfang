@@ -117,4 +117,12 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - WGC backend, DWM-aware client crop, production selection, capture-diagnostic CLI, and safe DeepSeek error metadata are implemented. Real diagnostic now passes WGC and classifies the visible GDI panel as capture contamination; PrintWindow is diagnostic-only and failed closed with Win32 error 5.
 - Final local verification before delivery: `79 passed, 1 skipped`; `compileall PASS`; `git diff --check PASS`; real `capture-diagnostic` WGC PASS at 1280x960; `vision-probe` PASS with HTTP 200 and usage; read-only WGC preflight PASS with valid build_menu/dialog schemas. Default OPEN/CLOSE IDs were not returned by Vision in this already-open-menu frame, so no coordinates or Live action were attempted.
 - Delivery: implementation commit `d34cfaf89f1b3d542d93bb4ccbdab70b38034efb` pushed to `origin/main`; GitHub Actions run `33974476370` passed on Python 3.11 and 3.12. No Live input, `arm-live`, or `e2e-build-menu` was executed.
+
+## 2026-09-05 — Semantic build-menu calibration started
+
+- Current baseline is pushed at `6e70e04`; WGC and Vision are healthy, but default OPEN/CLOSE IDs were not found in the open-menu frame.
+- Implementing role-to-canonical normalization, `build_controls`, read-only state calibration, and explicit readiness fields before using any E2E target.
+- OPEN state calibration PASS: selected close target `build_menu_close_control` in `build_controls` with confidence 0.90. No input was sent. Waiting for manual menu close before CLOSED calibration.
+- CLOSED state calibration PASS: `build_controls` required the permitted full-client fallback; selected open target `build_menu_open_control` with confidence 0.90. Final `build_menu_calibration.json` is `SEPARATE`, both states validated, `live_e2e_ready=true`.
+- Calibration verification: `83 passed, 1 skipped`; compileall PASS; diff check PASS. No `arm-live`, SendInput, or `e2e-build-menu`.
 - Verification after the changes: `72 passed, 1 skipped`; compileall PASS; diff check PASS; `live_armed=false`; no input was sent and no Live E2E was executed.

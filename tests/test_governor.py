@@ -28,7 +28,7 @@ from ai_governor.loop import CompositeObservationSource, GovernorLoop
 from ai_governor.config import Settings, load_persisted_settings, save_persisted_settings
 from ai_governor.cli import build_parser
 from ai_governor.deepseek import DeepSeekClient, DeepSeekRequestError
-from ai_governor.e2e import BuildMenuE2EHarness, E2EConfigurationError, run_read_only_preflight
+from ai_governor.e2e import BuildMenuE2EHarness, E2EConfigurationError, finalize_build_menu_calibration, run_read_only_preflight
 from ai_governor.events import MajorEventCoordinator, MajorEventDetector
 from ai_governor.feishu import CommandRouter, NullFeishuTransport, FeishuGateway
 from ai_governor.feishu_http import FeishuApiClient, FeishuEventHandler, FeishuHttpTransport, FeishuPayloadCipher
@@ -672,17 +672,29 @@ def test_build_menu_e2e_stops_on_first_failed_action(store: SQLiteStore, tmp_pat
 
         def __init__(self):
             self.calls = 0
+            self.plans = []
 
         def execute_plan(self, plan):
             self.calls += 1
+            self.plans.append(plan)
             return [{"status": "succeeded" if self.calls == 1 else "blocked", "error": "foreground mismatch"}]
 
     actions = FakeActions()
-    result = BuildMenuE2EHarness(settings, store, actions).run(attempts=100, confirm_live=True)
+    result = BuildMenuE2EHarness(
+        settings,
+        store,
+        actions,
+        open_region="build_controls",
+        open_element="build_menu_toggle",
+        close_region="build_controls",
+        close_element="build_menu_toggle",
+    ).run(attempts=100, confirm_live=True)
     assert result["completed_attempts"] == 0
     assert result["open_succeeded"] == 1
     assert result["blocked"] == 1
     assert result["passed"] is False
+    assert actions.plans[0].actions[0].payload["target_region"] == "build_controls"
+    assert actions.plans[1].actions[0].payload["target_region"] == "build_controls"
 
 
 def test_governor_halts_on_invalid_brain_response(store: SQLiteStore, tmp_path: Path) -> None:
@@ -717,13 +729,93 @@ def test_perception_normalizes_valid_ui_elements() -> None:
             return {
                 "build_menu_open": True,
                 "current_screen": "build_menu",
-                "ui_elements": [{"id": "build", "label": "建造", "bbox": [0.1, 0.2, 0.3, 0.4]}],
+                "ui_elements": [{"id": "random-build-id", "role": "BUILD_MENU_TOGGLE", "label": "建造", "confidence": 0.95, "bbox": [0.1, 0.2, 0.3, 0.4]}],
             }
 
     observation = PerceptionEngine(Analyzer(), RegionCatalog()).observe(b"frame", "build_menu")
-    assert observation.data["ui_elements"][0]["id"] == "build"
+    assert observation.data["ui_elements"][0]["id"] == "build_menu_toggle"
+    assert observation.data["ui_elements"][0]["raw_id"] == "random-build-id"
     assert observation.data["ui_elements"][0]["bbox"] == [0.1, 0.2, 0.3, 0.4]
     assert observation.data["ui_elements"][0]["global_bbox"] == pytest.approx([0.048, 0.824, 0.144, 0.868])
+
+
+def test_build_ui_roles_map_to_distinct_canonical_ids() -> None:
+    class Analyzer(FakeAnalyzer):
+        def analyze_image_json(self, image, prompt, *, model=None):
+            return {
+                "build_menu_open": True,
+                "current_screen": "build_menu",
+                "ui_elements": [
+                    {"id": "random-open", "role": "BUILD_MENU_OPEN", "label": "打开", "confidence": 0.95, "bbox": [0.1, 0.1, 0.2, 0.2]},
+                    {"id": "random-close", "role": "BUILD_MENU_CLOSE", "label": "关闭", "confidence": 0.95, "bbox": [0.3, 0.1, 0.4, 0.2]},
+                ],
+            }
+
+    elements = PerceptionEngine(Analyzer(), RegionCatalog()).observe(b"frame", "build_controls").data["ui_elements"]
+    assert [item["id"] for item in elements] == ["build_menu_open_control", "build_menu_close_control"]
+    assert [item["raw_id"] for item in elements] == ["random-open", "random-close"]
+
+
+def test_build_controls_global_bbox_uses_full_client_coordinates() -> None:
+    class Analyzer(FakeAnalyzer):
+        def analyze_image_json(self, image, prompt, *, model=None):
+            return {
+                "build_menu_open": False,
+                "current_screen": "city",
+                "ui_elements": [{"id": "toggle-any", "role": "BUILD_MENU_TOGGLE", "label": "建筑", "confidence": 0.95, "bbox": [0.1, 0.2, 0.3, 0.4]}],
+            }
+
+    element = PerceptionEngine(Analyzer(), RegionCatalog()).observe(b"frame", "build_controls").data["ui_elements"][0]
+    assert element["id"] == "build_menu_toggle"
+    assert element["global_bbox"] == pytest.approx([0.1, 0.72, 0.3, 0.79])
+
+
+def test_calibration_finalize_detects_toggle_and_requires_both_states(tmp_path: Path) -> None:
+    assert finalize_build_menu_calibration(tmp_path)["live_e2e_ready"] is False
+    open_data = {
+        "build_menu_open": True,
+        "calibration_pass": True,
+        "resolution": [1280, 960],
+        "selected_target": {
+            "role": "BUILD_MENU_TOGGLE",
+            "canonical_id": "build_menu_toggle",
+            "region": "build_controls",
+            "global_bbox": [0.1, 0.8, 0.2, 0.9],
+        },
+    }
+    closed_data = {
+        "build_menu_open": False,
+        "calibration_pass": True,
+        "selected_target": {
+            "role": "BUILD_MENU_TOGGLE",
+            "canonical_id": "build_menu_toggle",
+            "region": "build_controls",
+            "global_bbox": [0.1, 0.8, 0.2, 0.9],
+        },
+    }
+    (tmp_path / "build_menu_open_calibration.json").write_text(json.dumps(open_data), encoding="utf-8")
+    (tmp_path / "build_menu_closed_calibration.json").write_text(json.dumps(closed_data), encoding="utf-8")
+    result = finalize_build_menu_calibration(tmp_path)
+    assert result["control_mode"] == "TOGGLE"
+    assert result["live_e2e_ready"] is True
+
+
+def test_calibration_finalize_detects_separate_open_close_controls(tmp_path: Path) -> None:
+    common = {"calibration_pass": True, "resolution": [1280, 960]}
+    (tmp_path / "build_menu_open_calibration.json").write_text(json.dumps({
+        **common,
+        "build_menu_open": True,
+        "selected_target": {"role": "BUILD_MENU_CLOSE", "canonical_id": "build_menu_close_control", "region": "build_controls", "global_bbox": [0.1, 0.8, 0.2, 0.9]},
+    }), encoding="utf-8")
+    (tmp_path / "build_menu_closed_calibration.json").write_text(json.dumps({
+        **common,
+        "build_menu_open": False,
+        "selected_target": {"role": "BUILD_MENU_OPEN", "canonical_id": "build_menu_open_control", "region": "build_controls", "global_bbox": [0.7, 0.8, 0.8, 0.9]},
+    }), encoding="utf-8")
+    result = finalize_build_menu_calibration(tmp_path)
+    assert result["control_mode"] == "SEPARATE"
+    assert result["open"]["canonical_id"] == "build_menu_open_control"
+    assert result["close"]["canonical_id"] == "build_menu_close_control"
 
 
 def test_perception_rejects_invalid_ui_element_bbox() -> None:
@@ -1012,14 +1104,14 @@ def test_read_only_preflight_does_not_require_foreground(monkeypatch, tmp_path: 
                     "build_menu_open": False,
                     "current_screen": "city",
                     "confidence": 0.91,
-                    "ui_elements": [{"id": "build_menu_button", "label": "建筑", "bbox": [0.1, 0.1, 0.2, 0.2]}],
+                        "ui_elements": [{"id": "random-open", "role": "BUILD_MENU_TOGGLE", "label": "建筑", "confidence": 0.95, "bbox": [0.1, 0.1, 0.2, 0.2]}],
                 }
             return {
                 "dialog_open": False,
                 "current_screen": "city",
                 "options": [],
                 "confidence": 0.88,
-                "ui_elements": [{"id": "close_build_menu", "label": "关闭", "bbox": [0.7, 0.7, 0.8, 0.8]}],
+                "ui_elements": [{"id": "random-close", "role": "BUILD_MENU_CLOSE", "label": "关闭", "confidence": 0.95, "bbox": [0.7, 0.7, 0.8, 0.8]}],
             }
 
     backend = FakeWindowBackend()
@@ -1039,6 +1131,11 @@ def test_read_only_preflight_does_not_require_foreground(monkeypatch, tmp_path: 
     assert report["vision"]["dialog"]["ui_elements"]
     assert report["elements"]["open"]["found"] is True
     assert report["elements"]["close"]["found"] is True
+    assert report["capture_pass"] is True
+    assert report["vision_pass"] is True
+    assert report["action_target_calibrated"] is False
+    assert report["live_e2e_ready"] is False
+    assert report["status"] == "ACTION_TARGET_CALIBRATION_PENDING"
 
 
 def test_read_only_preflight_does_not_fallback_when_wgc_is_unavailable(monkeypatch, tmp_path: Path, store: SQLiteStore) -> None:

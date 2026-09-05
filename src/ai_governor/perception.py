@@ -1,10 +1,55 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any, Protocol
 
 from .capture import encode_rgba_png
 from .models import Observation, RegionSpec
+
+
+BUILD_UI_ROLES = (
+    "BUILD_MENU_TOGGLE",
+    "BUILD_MENU_OPEN",
+    "BUILD_MENU_CLOSE",
+    "BUILD_CATEGORY_TAB",
+    "BUILD_OPTION",
+    "BUILD_DISABLED_OPTION",
+    "UNKNOWN",
+)
+_BUILD_UI_ROLE_SET = frozenset(BUILD_UI_ROLES)
+
+
+def normalize_build_ui_role(value: Any) -> str:
+    if not isinstance(value, str):
+        return "UNKNOWN"
+    role = value.strip().upper()
+    return role if role in _BUILD_UI_ROLE_SET else "UNKNOWN"
+
+
+def _label_slug(label: Any) -> str:
+    if not isinstance(label, str) or not label.strip():
+        return ""
+    value = re.sub(r"\s+", "_", label.strip().lower())
+    value = re.sub(r"[^\w\u4e00-\u9fff]+", "_", value, flags=re.UNICODE)
+    return value.strip("_")
+
+
+def canonical_build_ui_id(role: Any, label: Any, index: int) -> str:
+    """Map a controlled semantic role to a stable runtime element ID."""
+    normalized_role = normalize_build_ui_role(role)
+    slug = _label_slug(label)
+    if normalized_role == "BUILD_MENU_TOGGLE":
+        return "build_menu_toggle"
+    if normalized_role == "BUILD_MENU_OPEN":
+        return "build_menu_open_control"
+    if normalized_role == "BUILD_MENU_CLOSE":
+        return "build_menu_close_control"
+    if normalized_role == "BUILD_CATEGORY_TAB":
+        return f"build_category_tab_{slug or index + 1}"
+    if normalized_role in {"BUILD_OPTION", "BUILD_DISABLED_OPTION"}:
+        return f"build_option_{slug or index + 1}"
+    return f"unknown_element_{index + 1}"
 
 
 class FrameSource(Protocol):
@@ -23,6 +68,7 @@ class RegionCatalog:
         RegionSpec("map", 0.18, 0.12, 0.82, 0.90, "识别道路、建筑、空地、施工状态和明显阻塞。"),
         RegionSpec("events", 0.58, 0.04, 1.00, 0.42, "只识别任务、警告、剧情或需要决策的弹窗。"),
         RegionSpec("build_menu", 0.00, 0.78, 0.48, 1.00, "识别当前建筑分类、可建按钮和资源/科技限制。"),
+        RegionSpec("build_controls", 0.00, 0.65, 1.00, 1.00, "只识别建筑菜单开关、关闭按钮、建筑栏和分类按钮，不分析地图。"),
         RegionSpec("dialog", 0.22, 0.18, 0.78, 0.82, "只读取弹窗标题、正文、所有选项及按钮，不推测未显示的内容。"),
     )
 
@@ -52,6 +98,29 @@ class PerceptionEngine:
     def observe_rgba(self, rgba: bytes, width: int, height: int, region_name: str, *, context: str = "") -> Observation:
         """Crop a real client-area frame before sending it to DeepSeek."""
         region = self.regions.get(region_name)
+        return self._observe_region_rgba(rgba, width, height, region, context=context)
+
+    def observe_custom_rgba(
+        self,
+        rgba: bytes,
+        width: int,
+        height: int,
+        region: RegionSpec,
+        *,
+        context: str = "",
+    ) -> Observation:
+        """Analyze a calibration-only custom ROI without changing runtime catalog."""
+        return self._observe_region_rgba(rgba, width, height, region, context=context)
+
+    def _observe_region_rgba(
+        self,
+        rgba: bytes,
+        width: int,
+        height: int,
+        region: RegionSpec,
+        *,
+        context: str = "",
+    ) -> Observation:
         left, top, right, bottom = region.crop_box(width, height)
         cropped_width, cropped_height = right - left, bottom - top
         if cropped_width <= 0 or cropped_height <= 0:
@@ -72,7 +141,7 @@ class PerceptionEngine:
 
     def _analyze(self, frame: bytes, region: RegionSpec, *, context: str, crop_box: tuple[int, int, int, int] | None) -> Observation:
         schema_instruction = ""
-        if region.name == "build_menu":
+        if region.name in {"build_menu", "build_controls"}:
             schema_instruction = (
                 "本区域必须额外返回 build_menu_open 布尔值和非空 current_screen 字符串；"
                 "build_menu_open 表示建筑菜单当前是否可见。"
@@ -87,8 +156,10 @@ class PerceptionEngine:
             f"关注区域：{region.name}\n{region.focus_instruction}\n"
             "只返回可从图像确认的事实，未知值使用 null；返回 JSON。"
             "如果看见可操作控件，额外返回 ui_elements 数组；每项必须是"
-            "{id: string, label: string, bbox: [left, top, right, bottom]}，"
+            "{id: string, role: string, label: string, bbox: [left, top, right, bottom], confidence: number}，"
             "bbox 是相对于当前裁剪图的 0 到 1 归一化坐标，不要猜测不可见控件。"
+            "建筑控件 role 只能使用 BUILD_MENU_TOGGLE、BUILD_MENU_OPEN、BUILD_MENU_CLOSE、"
+            "BUILD_CATEGORY_TAB、BUILD_OPTION、BUILD_DISABLED_OPTION、UNKNOWN。"
             f"{schema_instruction}"
         )
         result = self.analyzer.analyze_image_json(frame, prompt, model=self.model)
@@ -103,7 +174,7 @@ class PerceptionEngine:
 
     @staticmethod
     def _validate_region_schema(result: dict[str, Any], region: RegionSpec) -> None:
-        if region.name == "build_menu":
+        if region.name in {"build_menu", "build_controls"}:
             if not isinstance(result.get("build_menu_open"), bool):
                 raise ValueError("build_menu vision schema requires boolean build_menu_open")
             current_screen = result.get("current_screen")
@@ -133,10 +204,10 @@ class PerceptionEngine:
         for item in raw_elements:
             if not isinstance(item, dict):
                 raise ValueError("each ui element must be an object")
-            element_id = item.get("id")
+            raw_id = item.get("id")
             bbox = item.get("bbox")
-            if not isinstance(element_id, str) or not element_id.strip():
-                raise ValueError("each ui element requires a non-empty id")
+            if not isinstance(raw_id, str) or not raw_id.strip():
+                raw_id = f"vision_element_{len(normalized) + 1}"
             if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
                 raise ValueError("ui element bbox must be [left, top, right, bottom]")
             try:
@@ -146,10 +217,19 @@ class PerceptionEngine:
             left, top, right, bottom = values
             if not 0 <= left < right <= 1 or not 0 <= top < bottom <= 1:
                 raise ValueError("ui element bbox must use normalized coordinates between 0 and 1")
+            role = normalize_build_ui_role(item.get("role"))
+            element_confidence = item.get("confidence", result.get("confidence"))
+            if element_confidence is not None and not isinstance(element_confidence, (int, float)):
+                raise ValueError("ui element confidence must be numeric")
+            canonical_id = canonical_build_ui_id(role, item.get("label"), len(normalized))
             normalized.append({
                 **item,
-                "id": element_id.strip(),
+                "id": canonical_id,
+                "raw_id": raw_id.strip(),
+                "canonical_id": canonical_id,
+                "role": role,
                 "bbox": values,
+                "confidence": element_confidence,
                 "global_bbox": region.local_to_global_bbox(values),
             })
         return {**result, "ui_elements": normalized}

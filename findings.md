@@ -34,6 +34,15 @@
 - The current persisted DeepSeek Vision model is rejected by the API with HTTP 400; target model is `deepseek-v4-flash-vision-exp` at `https://api.deepseek.com`.
 - Real `capture-diagnostic` result: GDI succeeded at 1280x960 but visibly included the AI Governor panel; WGC succeeded at 1280x960 with a clean Song client; PrintWindow returned Win32 error 5. The WGC crop must use DWM extended frame bounds because `GetWindowRect` included invisible resize borders (1296x999 vs WGC 1282x992).
 
+## 2026-09-05 — Semantic build-menu calibration requirements
+
+- Vision currently returns arbitrary raw IDs such as `build_option_1`; preflight can have valid schemas while default `build_menu_button` / `close_build_menu` targets are absent.
+- Calibration must normalize controlled roles (`BUILD_MENU_TOGGLE`, `BUILD_MENU_OPEN`, `BUILD_MENU_CLOSE`, `BUILD_CATEGORY_TAB`, `BUILD_OPTION`, `BUILD_DISABLED_OPTION`, `UNKNOWN`) into stable canonical IDs and retain raw IDs only in diagnostics.
+- The currently open Song frame must be used for the first read-only calibration state. No input or focus changes are allowed; the second state requires the user to manually close the menu.
+- OPEN calibration result: WGC captured Song at 1280x960 with `build_menu_open=true`; `build_controls` found `BUILD_MENU_CLOSE` → `build_menu_close_control`, raw ID `close_button`, confidence `0.90`, global bbox `[0.76, 0.825, 0.86, 0.8775]`. No full-client fallback was needed. The first implementation briefly selected the wrong open-state role and was corrected before accepting this result.
+- CLOSED calibration result: WGC captured `build_menu_open=false`; `build_controls` was empty, so calibration-only full-client fallback found `BUILD_MENU_OPEN` → `build_menu_open_control`, raw ID `build_menu_button_top_right`, confidence `0.90`, global bbox `[0.8, 0.04, 0.85, 0.08]`.
+- Final mapping is `SEPARATE`: closed-state open target is `build_menu_open_control`; open-state close target is `build_menu_close_control`. Both states are validated and `live_e2e_ready=true`; no input was used.
+
 ## 2026-09-05 — Latest acceptance safety batch
 
 - A semantic post-action verifier alone was too late: the previous flow could emit live input and only then discover that `expected_state`/`changed_fields` was absent. The action engine now performs preflight validation before recording RUNNING or invoking the executor.

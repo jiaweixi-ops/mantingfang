@@ -16,7 +16,13 @@ from .capture import (
     encode_rgba_png,
 )
 from .deepseek import DeepSeekConfigurationError, DeepSeekRequestError, DeepSeekClient
-from .e2e import BuildMenuE2EHarness, E2EConfigurationError, E2EPreflightError, run_read_only_preflight
+from .e2e import (
+    BuildMenuE2EHarness,
+    E2EConfigurationError,
+    E2EPreflightError,
+    calibrate_build_menu_state,
+    run_read_only_preflight,
+)
 from .feishu import CommandRouter
 from .feishu_http import FeishuApiClient, FeishuCallbackServer, FeishuEventHandler
 from .memory import (
@@ -62,9 +68,15 @@ def build_parser() -> argparse.ArgumentParser:
     e2e = sub.add_parser("e2e-build-menu", help="run the explicitly gated real Steam build-menu E2E")
     e2e.add_argument("--attempts", type=int, default=100)
     e2e.add_argument("--confirm-live-e2e", action="store_true", help="required confirmation before real input")
-    e2e.add_argument("--open-element", default="build_menu_button")
-    e2e.add_argument("--close-element", default="close_build_menu")
+    e2e.add_argument("--open-region")
+    e2e.add_argument("--open-element")
+    e2e.add_argument("--close-region")
+    e2e.add_argument("--close-element")
     e2e.add_argument("--wait-for-game-foreground", action="store_true", help="wait up to 30 seconds for Song to remain foreground for 3 seconds")
+    calibration = sub.add_parser("e2e-calibrate-build-menu", help="read-only semantic build-menu calibration")
+    calibration.add_argument("--state", choices=("open", "closed"), required=True)
+    calibration.add_argument("--output-dir", default="data/e2e")
+    calibration.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
     preflight = sub.add_parser("e2e-preflight", help="run read-only Steam capture and Vision preflight")
     preflight.add_argument("--wait-for-game-foreground", action="store_true", help="wait up to 30 seconds for Song to remain foreground for 3 seconds")
     preflight.add_argument("--timeout-seconds", type=float, default=30.0)
@@ -304,19 +316,41 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 if args.wait_for_game_foreground:
                     run_read_only_preflight(settings, store, wait_for_game_foreground=True)
+                calibration_path = Path("data/e2e") / "build_menu_calibration.json"
+                calibration = {}
+                if calibration_path.exists():
+                    calibration = json.loads(calibration_path.read_text(encoding="utf-8"))
+                open_target = calibration.get("open") or {}
+                close_target = calibration.get("close") or {}
                 runtime = build_runtime(settings, store, ("resources", "events", "build_menu", "dialog"))
                 result = BuildMenuE2EHarness(
                     settings,
                     store,
                     runtime.governor.actions,
-                    open_element=args.open_element,
-                    close_element=args.close_element,
+                    open_region=args.open_region or open_target.get("region"),
+                    open_element=args.open_element or open_target.get("canonical_id"),
+                    close_region=args.close_region or close_target.get("region"),
+                    close_element=args.close_element or close_target.get("canonical_id"),
                 ).run(attempts=args.attempts, confirm_live=args.confirm_live_e2e)
             except (E2EConfigurationError, E2EPreflightError, RuntimeConfigurationError, DeepSeekConfigurationError, MemoryConfigurationError, MemoryAccessError, UnsupportedPlatformError, WindowError, CaptureError, OSError, ValueError) as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 2
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
+        if args.command == "e2e-calibrate-build-menu":
+            try:
+                result = calibrate_build_menu_state(
+                    settings,
+                    store,
+                    state=args.state,
+                    output_dir=Path(args.output_dir),
+                    window_title=args.title,
+                )
+            except (E2EPreflightError, DeepSeekConfigurationError, WindowError, CaptureError, OSError, ValueError) as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result.get("calibration_pass") else 2
         if args.command == "e2e-preflight":
             try:
                 result = run_read_only_preflight(

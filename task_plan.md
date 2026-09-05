@@ -150,3 +150,14 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Add capability, crop, failure, and safety regression tests.
 - [x] Run pytest, compileall, diff check, capture diagnostic, Vision probe, and read-only preflight.
 - [x] Commit/push only if all required checks pass; never arm Live or run e2e-build-menu.
+
+## Semantic build-menu calibration (2026-09-05)
+
+- [x] Separate read-only perception PASS from action-target calibration and Live E2E readiness.
+- [x] Normalize Vision semantic roles into canonical element IDs, preserving raw IDs only for diagnostics.
+- [x] Add `build_controls` ROI and calibration-only full-client fallback.
+- [x] Add read-only `e2e-calibrate-build-menu --state open|closed` and state artifacts.
+- [x] Support toggle and separate open/close targets without persisting pixel coordinates.
+- [x] Add calibration/E2E/resolver regression tests and run pytest/compileall/diff check.
+- [x] Run OPEN calibration only while the menu is currently open; stop for manual CLOSED-state transition.
+- [ ] Commit/push only after the requested two-state calibration and CI checks succeed; never arm Live or run e2e-build-menu.

@@ -11,7 +11,7 @@ from .actions import ActionEngine
 from .capture import ClientAreaCapture, WindowsGraphicsCaptureBackend
 from .config import Settings
 from .deepseek import DeepSeekClient, DeepSeekConfigurationError
-from .models import ActionPlan, PlannedAction
+from .models import ActionPlan, PlannedAction, RegionSpec
 from .perception import PerceptionEngine, RegionCatalog
 from .storage import SQLiteStore
 from .window import ForegroundTimeout, SteamWindowAdapter, Win32WindowBackend, WindowError, WindowNotFound
@@ -36,9 +36,13 @@ def _preflight_observation_summary(data: dict[str, Any]) -> dict[str, Any]:
         summary["ui_elements"] = [
             {
                 "id": item.get("id"),
+                "canonical_id": item.get("canonical_id", item.get("id")),
+                "raw_id": item.get("raw_id"),
+                "role": item.get("role", "UNKNOWN"),
                 "label": item.get("label"),
                 "bbox": item.get("bbox"),
                 "global_bbox": item.get("global_bbox"),
+                "confidence": item.get("confidence", data.get("confidence")),
             }
             for item in elements
             if isinstance(item, dict)
@@ -46,27 +50,244 @@ def _preflight_observation_summary(data: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
-def _find_preflight_element(observations: dict[str, dict[str, Any]], element_id: str) -> dict[str, Any]:
+def _find_preflight_element(
+    observations: dict[str, dict[str, Any]],
+    element_ids: tuple[str, ...],
+    roles: tuple[str, ...] = (),
+) -> dict[str, Any]:
     for region, data in observations.items():
         elements = data.get("ui_elements", [])
         for element in elements:
-            if isinstance(element, dict) and element.get("id") == element_id:
+            if not isinstance(element, dict):
+                continue
+            if element.get("id") in element_ids or element.get("canonical_id") in element_ids or element.get("role") in roles:
                 return {
                     "found": True,
                     "region": region,
-                    "id": element.get("id"),
+                    "id": element.get("canonical_id", element.get("id")),
+                    "canonical_id": element.get("canonical_id", element.get("id")),
+                    "raw_id": element.get("raw_id"),
+                    "role": element.get("role"),
                     "label": element.get("label"),
                     "global_bbox": element.get("global_bbox"),
-                    "confidence": data.get("confidence"),
+                    "confidence": element.get("confidence", data.get("confidence")),
                 }
     return {
         "found": False,
         "region": None,
-        "id": element_id,
+        "id": element_ids[0],
+        "canonical_id": None,
+        "raw_id": None,
+        "role": None,
         "label": None,
         "global_bbox": None,
         "confidence": None,
     }
+
+
+def _calibration_candidate(element: dict[str, Any], region: str) -> dict[str, Any]:
+    return {
+        "role": element.get("role", "UNKNOWN"),
+        "canonical_id": element.get("canonical_id", element.get("id")),
+        "raw_id": element.get("raw_id", element.get("id")),
+        "label": element.get("label"),
+        "region": region,
+        "bbox": element.get("bbox"),
+        "global_bbox": element.get("global_bbox"),
+        "confidence": element.get("confidence"),
+    }
+
+
+def _candidate_decision(candidate: dict[str, Any]) -> str:
+    confidence = candidate.get("confidence")
+    if not isinstance(confidence, (int, float)):
+        return "REJECT"
+    if confidence >= 0.90:
+        return "ACCEPT"
+    if confidence >= 0.70:
+        return "SECOND_VISION_PASS_REQUIRED"
+    return "REJECT"
+
+
+def _select_calibration_candidate(observation: dict[str, Any], state: str, region: str) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    allowed = {
+        # In the open state we calibrate the control that can close the menu;
+        # in the closed state we calibrate the control that can open it.
+        "open": {"BUILD_MENU_TOGGLE", "BUILD_MENU_CLOSE"},
+        "closed": {"BUILD_MENU_TOGGLE", "BUILD_MENU_OPEN"},
+    }[state]
+    candidates: list[dict[str, Any]] = []
+    for item in observation.get("ui_elements", []):
+        if not isinstance(item, dict):
+            continue
+        candidate = _calibration_candidate(item, region)
+        candidate["decision"] = _candidate_decision(candidate)
+        if candidate["role"] in allowed:
+            candidates.append(candidate)
+    accepted = [item for item in candidates if item["decision"] == "ACCEPT"]
+    accepted.sort(key=lambda item: float(item.get("confidence", 0)), reverse=True)
+    return candidates, accepted[0] if accepted else None
+
+
+def _bbox_iou(first: list[float] | None, second: list[float] | None) -> float:
+    if not isinstance(first, list) or not isinstance(second, list) or len(first) != 4 or len(second) != 4:
+        return 0.0
+    left = max(first[0], second[0])
+    top = max(first[1], second[1])
+    right = min(first[2], second[2])
+    bottom = min(first[3], second[3])
+    intersection = max(0.0, right - left) * max(0.0, bottom - top)
+    area_first = max(0.0, first[2] - first[0]) * max(0.0, first[3] - first[1])
+    area_second = max(0.0, second[2] - second[0]) * max(0.0, second[3] - second[1])
+    union = area_first + area_second - intersection
+    return intersection / union if union else 0.0
+
+
+def finalize_build_menu_calibration(output_dir: Path) -> dict[str, Any]:
+    """Combine independently captured open/closed states without storing pixels."""
+    open_path = output_dir / "build_menu_open_calibration.json"
+    closed_path = output_dir / "build_menu_closed_calibration.json"
+    if not open_path.exists() or not closed_path.exists():
+        return {"live_e2e_ready": False, "reason": "both open and closed calibrations are required"}
+    opened = json.loads(open_path.read_text(encoding="utf-8"))
+    closed = json.loads(closed_path.read_text(encoding="utf-8"))
+    # The open-state frame exposes the control that closes the menu; the
+    # closed-state frame exposes the control that opens it.
+    close_target = opened.get("selected_target")
+    open_target = closed.get("selected_target")
+    result: dict[str, Any] = {
+        "resolution": opened.get("resolution"),
+        "control_mode": None,
+        "open": None,
+        "close": None,
+        "validated_states": {
+            "closed": closed.get("build_menu_open") is False and bool(closed.get("calibration_pass")),
+            "open": opened.get("build_menu_open") is True and bool(opened.get("calibration_pass")),
+        },
+        "live_e2e_ready": False,
+    }
+    if not open_target or not close_target or not all(result["validated_states"].values()):
+        result["reason"] = "one or both state calibrations are incomplete"
+        return result
+    overlap = _bbox_iou(open_target.get("global_bbox"), close_target.get("global_bbox"))
+    matching_role = open_target.get("role") == close_target.get("role")
+    if overlap >= 0.70 and matching_role:
+        result["control_mode"] = "TOGGLE"
+        result["open"] = {"region": open_target["region"], "canonical_id": open_target["canonical_id"], "role": open_target["role"]}
+        result["close"] = {"region": close_target["region"], "canonical_id": close_target["canonical_id"], "role": close_target["role"]}
+    elif open_target.get("role") == "BUILD_MENU_OPEN" and close_target.get("role") == "BUILD_MENU_CLOSE":
+        result["control_mode"] = "SEPARATE"
+        result["open"] = {"region": open_target["region"], "canonical_id": open_target["canonical_id"], "role": open_target["role"]}
+        result["close"] = {"region": close_target["region"], "canonical_id": close_target["canonical_id"], "role": close_target["role"]}
+    else:
+        result["reason"] = "open and close targets have no validated toggle or separate semantic mapping"
+        return result
+    result["live_e2e_ready"] = True
+    (output_dir / "build_menu_calibration.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return result
+
+
+def calibrate_build_menu_state(
+    settings: Settings,
+    store: SQLiteStore,
+    *,
+    state: str,
+    output_dir: Path = Path("data/e2e"),
+    window_title: str | None = None,
+) -> dict[str, Any]:
+    """Read-only calibration for one explicit build-menu state."""
+    if state not in {"open", "closed"}:
+        raise E2EPreflightError("calibration state must be open or closed")
+    if not settings.deepseek_api_key:
+        raise DeepSeekConfigurationError("DEEPSEEK_API_KEY is not configured")
+    if not settings.deepseek_vision_model:
+        raise DeepSeekConfigurationError("DEEPSEEK_VISION_MODEL is not configured")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    window_backend = Win32WindowBackend()
+    selected_title = window_title or settings.game_window_title
+    window = SteamWindowAdapter(selected_title, window_backend)
+    try:
+        info = window.locate()
+    except WindowNotFound:
+        if window_title or selected_title == "Song":
+            raise
+        window = SteamWindowAdapter("Song", window_backend)
+        info = window.locate()
+    capture = ClientAreaCapture(window, WindowsGraphicsCaptureBackend())
+    frame = capture.capture()
+    client = DeepSeekClient(
+        settings.deepseek_api_base,
+        settings.deepseek_api_key,
+        settings.deepseek_vision_model,
+        usage_callback=store.record_token_usage,
+    )
+    perception = PerceptionEngine(client, RegionCatalog(), model=settings.deepseek_vision_model)
+    region = RegionCatalog().get("build_controls")
+    regions_checked = ["build_controls"]
+    observation = perception.observe_rgba(
+        frame.rgba,
+        frame.width,
+        frame.height,
+        "build_controls",
+        context=(
+            f"只读建筑菜单校准，当前目标状态={state}；必须识别建筑菜单控制语义 role，不执行任何操作。"
+            "如果当前是 closed，build_controls 可能没有底部建筑栏，不要因此猜测；后续会扫描完整客户区。"
+        ),
+    )
+    expected_open = state == "open"
+    state_matches = observation.data.get("build_menu_open") is expected_open
+    candidates, selected = _select_calibration_candidate(observation.data, state, "build_controls")
+    fallback_used = False
+    full_client_vision: dict[str, Any] | None = None
+    if selected is None:
+        fallback_used = True
+        regions_checked.append("full_client")
+        full_region = RegionSpec(
+            "build_controls",
+            0.0,
+            0.0,
+            1.0,
+            1.0,
+            "校准模式：扫描完整游戏客户区，只寻找建筑菜单控制，不分析地图。"
+            "当前是 closed 时，优先检查右上角和界面边缘可打开建筑菜单的入口按钮；"
+            "如果确实看不到控制，返回空数组，不要猜测坐标。",
+        )
+        full_observation = perception.observe_custom_rgba(
+            frame.rgba,
+            frame.width,
+            frame.height,
+            full_region,
+            context=f"只读建筑菜单全客户区校准，当前目标状态={state}；只寻找 BUILD_MENU_TOGGLE/OPEN/CLOSE，不执行任何操作",
+        )
+        if full_observation.data.get("build_menu_open") is expected_open:
+            state_matches = True
+        full_client_vision = _preflight_observation_summary(full_observation.data)
+        full_candidates, full_selected = _select_calibration_candidate(full_observation.data, state, "build_controls")
+        candidates.extend(full_candidates)
+        selected = full_selected
+    result: dict[str, Any] = {
+        "state": state,
+        "build_menu_open": observation.data.get("build_menu_open"),
+        "state_matches": state_matches,
+        "resolution": [frame.width, frame.height],
+        "game_hwnd": info.hwnd,
+        "game_pid": window_backend.window_process_id(info.hwnd),
+        "capture": frame.diagnostic.to_dict() if frame.diagnostic else None,
+        "vision_regions_checked": regions_checked,
+        "full_client_fallback": fallback_used,
+        "vision": _preflight_observation_summary(observation.data),
+        "full_client_vision": full_client_vision,
+        "candidates": candidates,
+        "selected_target": selected,
+        "calibration_pass": bool(state_matches and selected),
+        "live_e2e_ready": False,
+    }
+    path = output_dir / f"build_menu_{state}_calibration.json"
+    path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if state == "closed" and result["calibration_pass"]:
+        combined = finalize_build_menu_calibration(output_dir)
+        result["combined_calibration"] = combined
+    return result
 
 
 def run_read_only_preflight(
@@ -135,6 +356,12 @@ def run_read_only_preflight(
     report_path = output_dir / "preflight_vision.json"
     report: dict[str, Any] = {
         "status": "CAPTURE_PASS",
+        "capture_pass": True,
+        "vision_pass": False,
+        "open_target_ready": False,
+        "close_target_ready": False,
+        "action_target_calibrated": False,
+        "live_e2e_ready": False,
         "wait_for_game_foreground": wait_for_game_foreground,
         "foreground_stable_seconds": stable_seconds if wait_for_game_foreground else None,
         "window": {
@@ -174,18 +401,38 @@ def run_read_only_preflight(
             )
         except Exception as exc:
             report["status"] = "FAIL"
+            report["vision_pass"] = False
             report["failure_class"] = "VISION_ERROR"
             report["failure_reason"] = f"{type(exc).__name__}: {exc}"
             report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             raise E2EPreflightError(f"VISION_ERROR: {type(exc).__name__}: {exc}") from exc
         observations[region_name] = _preflight_observation_summary(observation.data)
 
-    report["status"] = "PASS"
+    report["vision_pass"] = True
     report["vision"] = observations
     report["elements"] = {
-        "open": _find_preflight_element(observations, "build_menu_button"),
-        "close": _find_preflight_element(observations, "close_build_menu"),
+        "open": _find_preflight_element(
+            observations,
+            ("build_menu_open_control", "build_menu_toggle"),
+            ("BUILD_MENU_OPEN", "BUILD_MENU_TOGGLE"),
+        ),
+        "close": _find_preflight_element(
+            observations,
+            ("build_menu_close_control", "build_menu_toggle"),
+            ("BUILD_MENU_CLOSE", "BUILD_MENU_TOGGLE"),
+        ),
     }
+    report["open_target_ready"] = bool(report["elements"]["open"]["found"])
+    report["close_target_ready"] = bool(report["elements"]["close"]["found"])
+    calibration_path = output_dir / "build_menu_calibration.json"
+    if calibration_path.exists():
+        try:
+            calibration = json.loads(calibration_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            calibration = {}
+        report["action_target_calibrated"] = bool(calibration.get("live_e2e_ready"))
+    report["live_e2e_ready"] = bool(report["action_target_calibrated"])
+    report["status"] = "LIVE_E2E_READY" if report["live_e2e_ready"] else "ACTION_TARGET_CALIBRATION_PENDING"
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return report
 
@@ -195,8 +442,10 @@ class BuildMenuE2EHarness:
     settings: Settings
     store: SQLiteStore
     actions: ActionEngine
-    open_element: str = "build_menu_button"
-    close_element: str = "close_build_menu"
+    open_region: str | None = None
+    open_element: str | None = None
+    close_region: str | None = None
+    close_element: str | None = None
 
     def run(self, *, attempts: int = 100, confirm_live: bool = False) -> dict[str, Any]:
         if not confirm_live:
@@ -209,8 +458,8 @@ class BuildMenuE2EHarness:
             raise E2EConfigurationError("real E2E requires explicit live arming")
         if self.actions.verifier is None or not getattr(self.actions.verifier, "semantic", False):
             raise E2EConfigurationError("real E2E requires semantic verification")
-        if not self.open_element or not self.close_element:
-            raise E2EConfigurationError("open and close UI element ids are required")
+        if not all((self.open_region, self.open_element, self.close_region, self.close_element)):
+            raise E2EConfigurationError("open/close targets must come from a validated calibration")
 
         run_id = uuid4().hex
         started = time.perf_counter()
@@ -227,16 +476,16 @@ class BuildMenuE2EHarness:
             "passed": False,
         }
         for index in range(1, attempts + 1):
-            for phase, skill, element, expected in (
-                ("open", "OPEN_BUILD_MENU", self.open_element, True),
-                ("close", "CLOSE_BUILD_MENU", self.close_element, False),
+            for phase, skill, element, region, expected in (
+                ("open", "OPEN_BUILD_MENU", self.open_element, self.open_region, True),
+                ("close", "CLOSE_BUILD_MENU", self.close_element, self.close_region, False),
             ):
                 plan = ActionPlan(
                     reason=f"E2E-001 build menu {phase} cycle {index}",
                     actions=[PlannedAction(
                         skill,
                         {
-                            "target_region": "build_menu",
+                            "target_region": region,
                             "target_element": element,
                             "expected_state": {"build_menu_open": expected},
                             "e2e_cycle": index,
