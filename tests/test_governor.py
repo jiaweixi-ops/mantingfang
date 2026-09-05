@@ -8,6 +8,7 @@ import pytest
 
 from ai_governor.actions import ActionEngine, DryRunExecutor
 from ai_governor.capture import ClientAreaCapture, encode_rgba_png
+from ai_governor.input import DryRunInputAdapter, InputCommand, InputDisabled, WindowsSendInputAdapter
 from ai_governor.config import Settings
 from ai_governor.feishu import CommandRouter, NullFeishuTransport, FeishuGateway
 from ai_governor.governor import Governor
@@ -255,3 +256,16 @@ def test_client_capture_uses_window_client_dimensions() -> None:
     ).capture()
     assert (frame.width, frame.height) == (1920, 1080)
     assert frame.png.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_dry_run_input_uses_window_relative_coordinates() -> None:
+    adapter = DryRunInputAdapter(SteamWindowAdapter("满庭芳：宋上繁华", FakeWindowBackend()), [])
+    result = adapter.execute(InputCommand("move", 0.5, 0.5))
+    assert result["screen_point"] == (1060, 590)
+    assert result["simulated"] is True
+
+
+def test_live_input_is_disabled_by_default() -> None:
+    adapter = WindowsSendInputAdapter(SteamWindowAdapter("满庭芳：宋上繁华", FakeWindowBackend()), object())
+    with pytest.raises(InputDisabled, match="disabled"):
+        adapter.execute(InputCommand("click", 0.5, 0.5))

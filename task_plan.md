@@ -60,6 +60,7 @@ Build the first usable, safe local foundation for the Steam AI Governor describe
 | `git commit` cannot determine author identity | 1 | Resolved by setting repository-local `jiaweixi-ops` GitHub no-reply identity |
 | `git remote -v` is empty | 1 | Resolved by adding the user-provided GitHub URL as `origin` |
 | Direct GitHub push hit Schannel TLS handshake failure | 1 | Use the machine's configured GitHub proxy URL for this push attempt; do not disable TLS verification |
+| Task 4 ctypes nested input structures failed during test collection | 1 | Move Win32 input structures to module scope and rerun the suite |
 
 ## New memory-scan acceptance checks
 
@@ -79,7 +80,7 @@ Execute and push each item as its own verified task:
 1. [x] Steam Window Adapter: locate the exact game window, read client bounds, handle minimized state, and expose normalized client coordinates.
 2. [x] Real client-area screenshot capture.
 3. [x] Actual ROI image cropping before DeepSeek Vision.
-4. [ ] Windows `SendInput` adapter, initially limited to explicitly safe dry-run/calibration actions.
+4. [x] Windows `SendInput` adapter, initially limited to explicitly safe dry-run/calibration actions.
 5. [ ] Post-action screenshot/state verification.
 6. [ ] Fix major-event pause ordering and ensure the watchdog is paused before notification.
 7. [ ] Replace permanent action de-duplication with scoped idempotency.
@@ -91,4 +92,4 @@ Execute and push each item as its own verified task:
 
 ### Current V0.2 task
 
-Task 4 — Windows `SendInput` adapter, initially limited to explicitly safe dry-run/calibration actions.
+Task 5 — Post-action screenshot/state verification.

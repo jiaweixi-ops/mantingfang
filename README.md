@@ -38,6 +38,7 @@ src/ai_governor/
   memory.py        Windows 只读内存采样与 profile 校验
   window.py        Steam 窗口查找、客户区和归一化坐标
   capture.py       Windows 客户区截图与标准 PNG 编码
+  input.py         策略门控的 dry-run/SendInput 适配器
   models.py        状态、目标、动作、事件模型
   perception.py    区域化视觉接口
   reporting.py     状态/日报
@@ -62,3 +63,5 @@ py -3 -m ai_governor.cli capture --out screenshots/current.png
 `window-info` 只检查窗口和客户区，不会激活、点击或输入游戏。
 
 `capture` 读取窗口客户区并保存 PNG；窗口不存在、最小化或 GDI 捕获失败时会返回错误，不会伪造截图。实机视觉路径应将 `CapturedFrame.rgba` 传给 `PerceptionEngine.observe_rgba()`，由程序先裁剪 ROI，再调用 DeepSeek。
+
+`WindowsSendInputAdapter` 默认关闭；Task 4 只提供能力和策略边界，未将 live click/keyboard 接入 Governor。校准阶段使用 `DryRunInputAdapter`，不会向系统发送输入。

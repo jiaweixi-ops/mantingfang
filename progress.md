@@ -39,3 +39,6 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - V0.2 Task 2 complete: added Win32 GDI client-area capture, standard-library RGBA→PNG encoding, and `capture --out` CLI. Tests: 18 passed; compileall passed; live capture safely reported no matching game window. Task 3 is next: actual ROI cropping before DeepSeek Vision.
 - V0.2 Task 3 implementation in progress: real RGBA ROI cropping is now wired into `PerceptionEngine.observe_rgba()`; next step is test, commit, and push this isolated change.
 - V0.2 Task 3 complete: real client RGBA frames are cropped by `RegionSpec` before DeepSeek Vision, with crop metadata persisted in the observation result. Tests: 19 passed; compileall remains clean. Task 4 is next: guarded Windows input adapter.
+- V0.2 Task 4 implementation in progress: adding a policy-gated SendInput adapter with dry-run and coordinate-calibration defaults; live input will not be enabled by this task.
+- Task 4 first test attempt found a ctypes nested-structure scope error; moved the Win32 structs to module scope before retrying.
+- V0.2 Task 4 complete: added policy-gated dry-run and Windows SendInput adapters with normalized client coordinates; live input remains disabled by default and is not wired into Governor. Tests: 21 passed; compileall passed. Task 5 is next: post-action verification.
