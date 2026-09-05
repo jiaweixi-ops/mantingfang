@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
+from zoneinfo import ZoneInfo
 
 from .models import ActionStatus, Goal, MajorEvent, Observation, PlannedAction, utc_now
 
@@ -102,7 +104,7 @@ class SQLiteStore:
         return {key: int(row[key]) for key in ("prompt_tokens", "completion_tokens", "total_tokens")}
 
     def latest_observation(self) -> dict[str, Any] | None:
-        row = self._conn.execute("SELECT * FROM observations ORDER BY observed_at DESC LIMIT 1").fetchone()
+        row = self._conn.execute("SELECT * FROM observations ORDER BY observed_at DESC, rowid DESC LIMIT 1").fetchone()
         if row is None:
             return None
         return {**dict(row), "data": json.loads(row["data_json"])}
@@ -167,5 +169,38 @@ class SQLiteStore:
         )
         self._commit()
 
-    def today_action_count(self) -> int:
-        return int(self._conn.execute("SELECT COUNT(*) FROM actions WHERE created_at >= date('now')").fetchone()[0])
+    @staticmethod
+    def _local_day_bounds_utc(tz_name: str = "Asia/Shanghai") -> tuple[str, str]:
+        local_now = datetime.now(ZoneInfo(tz_name))
+        start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + timedelta(days=1)
+        return start.astimezone(timezone.utc).isoformat(), end.astimezone(timezone.utc).isoformat()
+
+    def today_action_count(self, tz_name: str = "Asia/Shanghai") -> int:
+        start, end = self._local_day_bounds_utc(tz_name)
+        return int(self._conn.execute("SELECT COUNT(*) FROM actions WHERE created_at >= ? AND created_at < ?", (start, end)).fetchone()[0])
+
+    def today_actions(self, tz_name: str = "Asia/Shanghai", limit: int = 20) -> list[dict[str, Any]]:
+        start, end = self._local_day_bounds_utc(tz_name)
+        rows = self._conn.execute(
+            "SELECT * FROM actions WHERE created_at >= ? AND created_at < ? ORDER BY created_at DESC LIMIT ?",
+            (start, end, limit),
+        ).fetchall()
+        return [
+            {**dict(row), "payload": json.loads(row["payload_json"]), "result": json.loads(row["result_json"]) if row["result_json"] else None}
+            for row in rows
+        ]
+
+    def recent_observations(self, limit: int = 20) -> list[dict[str, Any]]:
+        rows = self._conn.execute("SELECT * FROM observations ORDER BY observed_at DESC, rowid DESC LIMIT ?", (limit,)).fetchall()
+        return [{**dict(row), "data": json.loads(row["data_json"])} for row in rows]
+
+    def today_token_usage(self, tz_name: str = "Asia/Shanghai") -> dict[str, int]:
+        start, end = self._local_day_bounds_utc(tz_name)
+        row = self._conn.execute(
+            "SELECT COALESCE(SUM(prompt_tokens),0) AS prompt_tokens, "
+            "COALESCE(SUM(completion_tokens),0) AS completion_tokens, "
+            "COALESCE(SUM(total_tokens),0) AS total_tokens FROM token_usage WHERE recorded_at >= ? AND recorded_at < ?",
+            (start, end),
+        ).fetchone()
+        return {key: int(row[key]) for key in ("prompt_tokens", "completion_tokens", "total_tokens")}

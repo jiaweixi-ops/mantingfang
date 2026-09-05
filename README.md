@@ -22,7 +22,7 @@ py -3.11 -m venv .venv
 - AI provider 只有 DeepSeek；没有 GPT、Claude、Qwen 或隐式备用模型。
 - 视觉默认按 `resources`、`map`、`events`、`build_menu`、`dialog` 区域工作；复杂画面先定位再放大。
 - 数字状态可以通过 `memory-read` 接入显式的 Windows 只读内存 profile；地址必须由用户针对具体游戏版本校准，程序不猜地址、不做大范围扫描、不写进程内存。
-- 日报通过 `获取日报` 等命令按需生成；重大事件通过 Feishu gateway 主动发送。
+- 日报通过 `获取日报` 等命令按需生成；现在包含中国本地日界动作数、状态变化、动作摘要、瓶颈、下一目标和 DeepSeek Token 用量；重大事件通过 Feishu gateway 主动发送。
 - 动作具有风险等级、幂等键、审计记录、暂停/恢复和恢复确认门槛。
 - `GOVERNOR_EXECUTION_MODE=live` 仍需要 `GOVERNOR_ALLOW_LIVE_INPUT=true`、运行时 `live_armed=true` 和语义验证器三重条件；默认 dry-run，不会自动开启真实输入。
 

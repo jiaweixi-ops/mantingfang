@@ -49,6 +49,18 @@ def test_store_records_token_usage(store: SQLiteStore) -> None:
     assert store.token_usage_totals() == {"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14}
 
 
+def test_daily_report_includes_local_summary_and_state_delta(store: SQLiteStore, tmp_path: Path) -> None:
+    store.add_observation(Observation({"values": {"population": 10, "money": 80}}, source="readonly-memory"))
+    store.add_observation(Observation({"values": {"population": 12, "money": 100}}, source="readonly-memory"))
+    settings = Settings(db_path=tmp_path / "report.db")
+    ActionEngine(settings, store, DryRunExecutor()).execute_plan(ActionPlan("daily check", [PlannedAction("inspect_region", {"region": "resources"})]))
+    store.record_token_usage({"kind": "strategic", "model": "deepseek-reasoner", "prompt_tokens": 20, "completion_tokens": 5, "total_tokens": 25})
+    report = ReportService(store).daily_report()
+    assert "今天完成了什么" in report
+    assert "population" in report and "10 → 12" in report
+    assert "DeepSeek 用量" in report and "total=25" in report
+
+
 def test_deepseek_client_records_usage_without_network() -> None:
     callback = []
     client = DeepSeekClient("https://example.invalid", "key", "model", usage_callback=callback.append)
