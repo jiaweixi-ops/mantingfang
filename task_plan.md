@@ -60,6 +60,7 @@ Build the first usable, safe local foundation for the Steam AI Governor describe
 | `git commit` cannot determine author identity | 1 | Resolved by setting repository-local `jiaweixi-ops` GitHub no-reply identity |
 | `git remote -v` is empty | 1 | Resolved by adding the user-provided GitHub URL as `origin` |
 | Direct GitHub push hit Schannel TLS handshake failure | 1 | Use the machine's configured GitHub proxy URL for this push attempt; do not disable TLS verification |
+| `gh run watch` ended with a transient GitHub API EOF after both jobs showed green | 1 | Rechecked with `gh run list`; the run is completed with `success` for the pushed commit |
 | Task 4 ctypes nested input structures failed during test collection | 1 | Move Win32 input structures to module scope and rerun the suite |
 
 ## New memory-scan acceptance checks
@@ -71,7 +72,7 @@ Build the first usable, safe local foundation for the Steam AI Governor describe
 
 ## Next action
 
-Keep the local worktree clean and use the pushed foundation as the baseline for game-specific profile calibration.
+Keep the local worktree clean. The remaining acceptance work is external calibration: validated memory fields and a separately gated real Steam E2E run with the game window, UI IDs, and DeepSeek configuration available.
 
 ## V0.2 Game Integration backlog from latest acceptance
 
