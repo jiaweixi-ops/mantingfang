@@ -103,6 +103,6 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Add a guarded PlannedAction-to-game-skill bridge; live execution remains disabled until semantic verification exists.
 - [x] Strengthen post-action verification from screenshot availability to semantic state change.
 - [x] Add multi-source observation support to GovernorLoop.
-- [ ] Add a real multi-source `GovernorLoop` entry point and keep it dry-run by default.
+- [x] Add a real multi-source `GovernorLoop` entry point and keep it dry-run by default.
 - [x] Add DeepSeek transient retry/backoff and persist usage counters.
 - [ ] Add Feishu callback server/decryption, retry and usage accounting, and the expanded daily report.

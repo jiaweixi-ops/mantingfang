@@ -89,6 +89,8 @@ Governor 发给 DeepSeek Chat Completions 的用户上下文会序列化为 UTF-
 
 DeepSeek 客户端对网络超时、408、429 和 5xx 使用指数退避重试，并将返回的 prompt/completion/total tokens 记录到 SQLite；失败次数耗尽后仍会明确进入恢复路径。
 
+运行入口为 `run`：它会连接配置的 Steam 窗口、采集多区域视觉并可选读取显式内存 profile。`run` 默认继承 `GOVERNOR_EXECUTION_MODE=dry-run`；live 模式还必须先执行 `arm-live`，且每个动作需要语义状态验证。使用 `disarm-live` 可立即撤销运行时 arm 状态。
+
 `CompositeObservationSource` 可以在同一轮合并内存和多区域视觉观测；`InputActionExecutor` 只接受白名单输入技能，并可在动作前后采集状态交给 `SemanticStateVerifier`。截图可用性验证不再被视为 live 动作成功的充分条件。
 
 飞书正式接入使用 `FeishuApiClient` + `FeishuHttpTransport`：凭据来自环境变量，token 只缓存在进程内，事件处理支持 URL challenge、文本命令和可选签名校验。测试默认使用 fake HTTP，不会发送真实消息。

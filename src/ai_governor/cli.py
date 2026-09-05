@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .config import Settings
 from .capture import CaptureError, ClientAreaCapture, Win32ClientCaptureBackend
+from .deepseek import DeepSeekConfigurationError
 from .feishu import CommandRouter
 from .memory import (
     MemoryAccessError,
@@ -19,6 +20,7 @@ from .memory import (
 )
 from .window import SteamWindowAdapter, Win32WindowBackend, WindowError
 from .reporting import ReportService
+from .runtime import RuntimeConfigurationError, build_runtime
 from .storage import SQLiteStore
 from .watchdog import Watchdog
 
@@ -33,6 +35,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("goals")
     sub.add_parser("pause")
     sub.add_parser("resume")
+    sub.add_parser("arm-live", help="arm live input after explicit configuration")
+    sub.add_parser("disarm-live", help="disarm live input immediately")
+    run = sub.add_parser("run", help="run the DeepSeek Governor loop")
+    run.add_argument("--max-cycles", type=int, help="stop after this many cycles; omit for continuous run")
+    run.add_argument("--interval", type=float, default=10.0, help="seconds between cycles")
+    run.add_argument("--region", action="append", dest="regions", help="vision region; repeat for multiple regions")
     sub.add_parser("memory-processes", help="list Windows processes for profile calibration")
     memory_modules = sub.add_parser("memory-modules", help="list loaded modules for one Windows process")
     memory_modules.add_argument("--process-name", required=True, help="exact process name, for example Song.exe")
@@ -111,6 +119,30 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "init":
             print(f"initialized {settings.db_path}")
+            return 0
+        if args.command == "arm-live":
+            if settings.execution_mode != "live" or not settings.allow_live_input:
+                print("ERROR: set GOVERNOR_EXECUTION_MODE=live and GOVERNOR_ALLOW_LIVE_INPUT=true first", file=sys.stderr)
+                return 2
+            store.set_runtime("live_armed", True)
+            print("live input armed; semantic verification is still required")
+            return 0
+        if args.command == "disarm-live":
+            store.set_runtime("live_armed", False)
+            print("live input disarmed")
+            return 0
+        if args.command == "run":
+            if args.interval < 0:
+                print("ERROR: --interval must be non-negative", file=sys.stderr)
+                return 2
+            try:
+                runtime = build_runtime(settings, store, args.regions or ("resources", "map", "events"))
+                runtime.loop.interval_seconds = args.interval
+                cycles = runtime.loop.run(max_cycles=args.max_cycles)
+            except (RuntimeConfigurationError, DeepSeekConfigurationError, MemoryConfigurationError, MemoryAccessError, UnsupportedPlatformError, WindowError, CaptureError, OSError, ValueError) as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
+            print(json.dumps([cycle.__dict__ for cycle in cycles], ensure_ascii=False, indent=2))
             return 0
         reports = ReportService(store)
         watchdog = Watchdog(store)
