@@ -149,4 +149,4 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Make production runtime and read-only preflight select WGC.
 - [x] Add capability, crop, failure, and safety regression tests.
 - [x] Run pytest, compileall, diff check, capture diagnostic, Vision probe, and read-only preflight.
-- [ ] Commit/push only if all required checks pass; never arm Live or run e2e-build-menu.
+- [x] Commit/push only if all required checks pass; never arm Live or run e2e-build-menu.
