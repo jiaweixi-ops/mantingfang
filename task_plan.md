@@ -85,11 +85,11 @@ Execute and push each item as its own verified task:
 6. [x] Fix major-event pause ordering and ensure the watchdog is paused before notification.
 7. [x] Replace permanent action de-duplication with scoped idempotency.
 8. [x] Add a long-running Governor loop with change detection and recovery.
-9. [ ] Add a real Feishu custom-app transport boundary.
+9. [x] Add a real Feishu custom-app transport boundary.
 10. [ ] Calibrate the first real read-only memory fields for the installed game build.
 11. [ ] Aggregate memory and vision observations into a canonical GameState.
 12. [ ] Add stronger strategy/reporting/watchdog features after integration is observable.
 
 ### Current V0.2 task
 
-Task 9 — Add a real Feishu custom-app transport boundary.
+Task 10 — Calibrate the first real read-only memory fields for the installed game build.

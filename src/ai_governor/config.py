@@ -27,6 +27,8 @@ class Settings:
     feishu_app_secret: str | None = None
     feishu_verification_token: str | None = None
     feishu_encrypt_key: str | None = None
+    feishu_api_base: str = "https://open.feishu.cn"
+    feishu_target_chat_id: str | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -47,6 +49,8 @@ class Settings:
             feishu_app_secret=os.getenv("FEISHU_APP_SECRET") or None,
             feishu_verification_token=os.getenv("FEISHU_VERIFICATION_TOKEN") or None,
             feishu_encrypt_key=os.getenv("FEISHU_ENCRYPT_KEY") or None,
+            feishu_api_base=os.getenv("FEISHU_API_BASE", cls.feishu_api_base).rstrip("/"),
+            feishu_target_chat_id=os.getenv("FEISHU_TARGET_CHAT_ID") or None,
         )
 
     def ensure_directories(self) -> None:

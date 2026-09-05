@@ -12,6 +12,7 @@ from ai_governor.input import DryRunInputAdapter, InputCommand, InputDisabled, W
 from ai_governor.loop import GovernorLoop
 from ai_governor.config import Settings
 from ai_governor.feishu import CommandRouter, NullFeishuTransport, FeishuGateway
+from ai_governor.feishu_http import FeishuApiClient, FeishuEventHandler, FeishuHttpTransport
 from ai_governor.governor import Governor
 from ai_governor.models import ActionPlan, Goal, MajorEvent, Observation, PlannedAction, RiskLevel
 from ai_governor.memory import MemoryAccessError, MemoryProfile, MemorySampler
@@ -94,6 +95,42 @@ def test_governor_loop_enters_recovery_after_repeated_sensor_errors(store: SQLit
     cycles = loop.run(max_cycles=5)
     assert [cycle.status for cycle in cycles] == ["observation_error", "needs_recovery"]
     assert store.get_runtime("recovery_required") is True
+
+
+class FakeFeishuHttp:
+    def __init__(self) -> None:
+        self.requests = []
+
+    def request(self, method, url, headers, body):
+        self.requests.append((method, url, headers, json.loads(body.decode("utf-8"))))
+        if url.endswith("tenant_access_token/internal"):
+            return 200, json.dumps({"code": 0, "tenant_access_token": "tenant-token", "expire": 7200}).encode()
+        return 200, json.dumps({"code": 0, "data": {"message_id": "om_test"}}).encode()
+
+
+def test_feishu_http_transport_caches_token_and_sends_text() -> None:
+    http = FakeFeishuHttp()
+    client = FeishuApiClient("app", "secret", http=http)
+    transport = FeishuHttpTransport(client, "oc_test")
+    transport.send_text("hello")
+    transport.send_text("again")
+    assert len(http.requests) == 3
+    assert http.requests[1][1].endswith("im/v1/messages?receive_id_type=chat_id")
+    assert http.requests[1][2]["Authorization"] == "Bearer tenant-token"
+
+
+def test_feishu_event_handler_handles_url_challenge_and_text(store: SQLiteStore) -> None:
+    http = FakeFeishuHttp()
+    client = FeishuApiClient("app", "secret", http=http)
+    router = CommandRouter(store, ReportService(store), Watchdog(store))
+    handler = FeishuEventHandler(router, client, verification_token="verify")
+    assert handler.handle({"type": "url_verification", "token": "verify", "challenge": "abc"}) == {"challenge": "abc"}
+    result = handler.handle({
+        "header": {"event_type": "im.message.receive_v1"},
+        "event": {"message": {"message_type": "text", "content": json.dumps({"text": "当前状态"}), "chat_id": "oc_test"}},
+    })
+    assert result["ok"] is True
+    assert len(http.requests) == 2
 
 
 def test_safety_gate_blocks_critical_and_pause(store: SQLiteStore, tmp_path: Path) -> None:

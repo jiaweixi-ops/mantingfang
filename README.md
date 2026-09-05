@@ -35,6 +35,7 @@ src/ai_governor/
   config.py        环境配置
   deepseek.py      唯一 AI provider 适配器
   feishu.py        双向命令/主动通知边界
+  feishu_http.py   飞书自建应用 token、消息和事件 payload Transport
   memory.py        Windows 只读内存采样与 profile 校验
   window.py        Steam 窗口查找、客户区和归一化坐标
   capture.py       Windows 客户区截图与标准 PNG 编码
@@ -73,3 +74,5 @@ py -3 -m ai_governor.cli capture --out screenshots/current.png
 动作幂等默认按 `plan_id + action_type + payload` 作用域计算，因此周期性资源检查可以在新计划中再次执行；只有显式提供 `idempotency_key` 的不可重复动作才跨计划永久去重。
 
 `GovernorLoop` 每轮读取观测，按稳定数据指纹跳过无变化画面，调用 Governor 处理变化，并在观测源连续失败达到阈值时暂停并进入恢复态。它是编排组件，不会自行启动游戏或启用 live 输入。
+
+飞书正式接入使用 `FeishuApiClient` + `FeishuHttpTransport`：凭据来自环境变量，token 只缓存在进程内，事件处理支持 URL challenge、文本命令和可选签名校验。测试默认使用 fake HTTP，不会发送真实消息。
