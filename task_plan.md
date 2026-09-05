@@ -81,7 +81,7 @@ Execute and push each item as its own verified task:
 2. [x] Real client-area screenshot capture.
 3. [x] Actual ROI image cropping before DeepSeek Vision.
 4. [x] Windows `SendInput` adapter, initially limited to explicitly safe dry-run/calibration actions.
-5. [ ] Post-action screenshot/state verification.
+5. [x] Post-action screenshot/state verification.
 6. [ ] Fix major-event pause ordering and ensure the watchdog is paused before notification.
 7. [ ] Replace permanent action de-duplication with scoped idempotency.
 8. [ ] Add a long-running Governor loop with change detection and recovery.
@@ -92,4 +92,4 @@ Execute and push each item as its own verified task:
 
 ### Current V0.2 task
 
-Task 5 — Post-action screenshot/state verification.
+Task 6 — Fix major-event pause ordering and ensure the watchdog is paused before notification.

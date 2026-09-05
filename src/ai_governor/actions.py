@@ -12,6 +12,10 @@ class ActionExecutor(Protocol):
     def execute(self, action: PlannedAction) -> dict[str, Any]: ...
 
 
+class ActionVerifier(Protocol):
+    def verify(self, action: PlannedAction, execution_result: dict[str, Any]) -> dict[str, Any]: ...
+
+
 class DryRunExecutor:
     def execute(self, action: PlannedAction) -> dict[str, Any]:
         return {"simulated": True, "action_type": action.action_type, "payload": action.payload}
@@ -50,6 +54,7 @@ class ActionEngine:
     settings: Settings
     store: SQLiteStore
     executor: ActionExecutor
+    verifier: ActionVerifier | None = None
 
     def __post_init__(self) -> None:
         self.gate = SafetyGate(self.settings, self.store)
@@ -74,6 +79,14 @@ class ActionEngine:
                 self.store.set_runtime("recovery_required", True)
                 results.append({"id": action.id, "status": ActionStatus.UNCERTAIN.value, "error": str(exc)})
                 continue
+            if self.verifier is not None:
+                try:
+                    result = {**result, "verification": self.verifier.verify(action, result)}
+                except Exception as exc:  # noqa: BLE001 — verification failure is unsafe to ignore
+                    self.store.record_action(action, ActionStatus.UNCERTAIN, {"error": str(exc), "phase": "verification"})
+                    self.store.set_runtime("recovery_required", True)
+                    results.append({"id": action.id, "status": ActionStatus.UNCERTAIN.value, "error": str(exc)})
+                    continue
             self.store.record_action(action, ActionStatus.SIMULATED, result)
             results.append({"id": action.id, "status": ActionStatus.SIMULATED.value, "result": result})
         return results

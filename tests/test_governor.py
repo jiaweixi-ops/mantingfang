@@ -19,6 +19,7 @@ from ai_governor.reporting import ReportService
 from ai_governor.storage import SQLiteStore
 from ai_governor.watchdog import Watchdog
 from ai_governor.window import SteamWindowAdapter, WindowNotFound
+from ai_governor.verification import ScreenshotVerifier
 
 
 @pytest.fixture
@@ -269,3 +270,24 @@ def test_live_input_is_disabled_by_default() -> None:
     adapter = WindowsSendInputAdapter(SteamWindowAdapter("满庭芳：宋上繁华", FakeWindowBackend()), object())
     with pytest.raises(InputDisabled, match="disabled"):
         adapter.execute(InputCommand("click", 0.5, 0.5))
+
+
+def test_screenshot_verifier_confirms_window_and_capture() -> None:
+    window = SteamWindowAdapter("满庭芳：宋上繁华", FakeWindowBackend())
+    capture = ClientAreaCapture(window, FakeCaptureBackend())
+    action = PlannedAction("inspect_region", {"region": "resources"})
+    result = ScreenshotVerifier(window, capture).verify(action, {"simulated": True})
+    assert result["verified"] is True
+    assert len(result["png_sha256"]) == 64
+
+
+def test_action_engine_enters_recovery_when_verification_fails(store: SQLiteStore, tmp_path: Path) -> None:
+    class FailingVerifier:
+        def verify(self, action, execution_result):
+            raise RuntimeError("post-action capture failed")
+    settings = Settings(db_path=tmp_path / "governor.db")
+    engine = ActionEngine(settings, store, DryRunExecutor(), FailingVerifier())
+    action = PlannedAction("inspect_region", {"region": "resources"}, idempotency_key="verify-fail")
+    result = engine.execute_plan(ActionPlan("verify", [action]))
+    assert result[0]["status"] == "uncertain"
+    assert store.get_runtime("recovery_required") is True
