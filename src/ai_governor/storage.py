@@ -101,22 +101,23 @@ class SQLiteStore:
         rows = self._conn.execute("SELECT * FROM goals WHERE status='active' ORDER BY created_at").fetchall()
         return [{**dict(row), "target": json.loads(row["target_json"])} for row in rows]
 
-    def record_action(self, action: PlannedAction, status: ActionStatus, result: dict[str, Any] | None = None) -> bool:
+    def record_action(self, action: PlannedAction, status: ActionStatus, result: dict[str, Any] | None = None, *, idempotency_key: str | None = None) -> bool:
+        action_key = idempotency_key or action.key()
         try:
             self._conn.execute(
                 "INSERT INTO actions(id, created_at, action_type, risk, idempotency_key, status, payload_json, result_json) VALUES(?,?,?,?,?,?,?,?)",
-                (action.id, utc_now(), action.action_type, action.risk.value, action.key(), status.value,
+                (action.id, utc_now(), action.action_type, action.risk.value, action_key, status.value,
                  json.dumps(action.payload, ensure_ascii=False), json.dumps(result, ensure_ascii=False) if result is not None else None),
             )
         except sqlite3.IntegrityError:
-            existing = self._conn.execute("SELECT id FROM actions WHERE idempotency_key=?", (action.key(),)).fetchone()
+            existing = self._conn.execute("SELECT id FROM actions WHERE idempotency_key=?", (action_key,)).fetchone()
             if existing is None or existing["id"] != action.id:
                 return False
             self._conn.execute(
                 "UPDATE actions SET status=?, result_json=? WHERE id=?",
                 (status.value, json.dumps(result, ensure_ascii=False) if result is not None else None, action.id),
             )
-        self.audit("action", f"action {status.value}", {"id": action.id, "key": action.key(), "type": action.action_type})
+        self.audit("action", f"action {status.value}", {"id": action.id, "key": action_key, "type": action.action_type})
         self._commit()
         return True
 

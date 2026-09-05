@@ -86,8 +86,11 @@ class PlannedAction:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     idempotency_key: str | None = None
 
-    def key(self) -> str:
-        return self.idempotency_key or f"{self.action_type}:{json.dumps(self.payload, sort_keys=True, ensure_ascii=False)}"
+    def key(self, scope: str | None = None) -> str:
+        if self.idempotency_key:
+            return self.idempotency_key
+        content = f"{self.action_type}:{json.dumps(self.payload, sort_keys=True, ensure_ascii=False)}"
+        return f"{scope}:{content}" if scope else content
 
 
 @dataclass

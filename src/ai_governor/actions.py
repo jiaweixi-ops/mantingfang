@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
 from .config import Settings
@@ -62,31 +62,33 @@ class ActionEngine:
     def execute_plan(self, plan: ActionPlan) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
         for action in plan.actions:
-            previous = self.store.action_by_key(action.key())
+            scoped_key = action.key(plan.plan_id)
+            effective_action = replace(action, id=f"{plan.plan_id}:{action.id}")
+            previous = self.store.action_by_key(scoped_key)
             if previous is not None:
                 results.append({"id": action.id, "status": "skipped_duplicate", "previous": previous["status"]})
                 continue
-            allowed, reason = self.gate.check(action)
+            allowed, reason = self.gate.check(effective_action)
             if not allowed:
-                self.store.record_action(action, ActionStatus.BLOCKED, {"reason": reason})
+                self.store.record_action(effective_action, ActionStatus.BLOCKED, {"reason": reason}, idempotency_key=scoped_key)
                 results.append({"id": action.id, "status": ActionStatus.BLOCKED.value, "reason": reason})
                 continue
-            self.store.record_action(action, ActionStatus.RUNNING, {"reason": reason})
+            self.store.record_action(effective_action, ActionStatus.RUNNING, {"reason": reason}, idempotency_key=scoped_key)
             try:
-                result = self.executor.execute(action)
+                result = self.executor.execute(effective_action)
             except Exception as exc:  # noqa: BLE001 — turn uncertainty into a safe halt
-                self.store.record_action(action, ActionStatus.UNCERTAIN, {"error": str(exc)})
+                self.store.record_action(effective_action, ActionStatus.UNCERTAIN, {"error": str(exc)}, idempotency_key=scoped_key)
                 self.store.set_runtime("recovery_required", True)
                 results.append({"id": action.id, "status": ActionStatus.UNCERTAIN.value, "error": str(exc)})
                 continue
             if self.verifier is not None:
                 try:
-                    result = {**result, "verification": self.verifier.verify(action, result)}
+                    result = {**result, "verification": self.verifier.verify(effective_action, result)}
                 except Exception as exc:  # noqa: BLE001 — verification failure is unsafe to ignore
-                    self.store.record_action(action, ActionStatus.UNCERTAIN, {"error": str(exc), "phase": "verification"})
+                    self.store.record_action(effective_action, ActionStatus.UNCERTAIN, {"error": str(exc), "phase": "verification"}, idempotency_key=scoped_key)
                     self.store.set_runtime("recovery_required", True)
                     results.append({"id": action.id, "status": ActionStatus.UNCERTAIN.value, "error": str(exc)})
                     continue
-            self.store.record_action(action, ActionStatus.SIMULATED, result)
+            self.store.record_action(effective_action, ActionStatus.SIMULATED, result, idempotency_key=scoped_key)
             results.append({"id": action.id, "status": ActionStatus.SIMULATED.value, "result": result})
         return results

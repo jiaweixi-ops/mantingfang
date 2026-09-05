@@ -83,7 +83,7 @@ Execute and push each item as its own verified task:
 4. [x] Windows `SendInput` adapter, initially limited to explicitly safe dry-run/calibration actions.
 5. [x] Post-action screenshot/state verification.
 6. [x] Fix major-event pause ordering and ensure the watchdog is paused before notification.
-7. [ ] Replace permanent action de-duplication with scoped idempotency.
+7. [x] Replace permanent action de-duplication with scoped idempotency.
 8. [ ] Add a long-running Governor loop with change detection and recovery.
 9. [ ] Add a real Feishu custom-app transport boundary.
 10. [ ] Calibrate the first real read-only memory fields for the installed game build.
@@ -92,4 +92,4 @@ Execute and push each item as its own verified task:
 
 ### Current V0.2 task
 
-Task 7 — Replace permanent action de-duplication with scoped idempotency.
+Task 8 — Add a long-running Governor loop with change detection and recovery.

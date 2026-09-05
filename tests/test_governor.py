@@ -49,6 +49,17 @@ def test_action_engine_is_dry_run_and_idempotent(store: SQLiteStore, tmp_path: P
     assert store.action_by_key("once")["status"] == "simulated"
 
 
+def test_default_action_idempotency_is_scoped_to_plan(store: SQLiteStore, tmp_path: Path) -> None:
+    settings = Settings(db_path=tmp_path / "governor.db")
+    engine = ActionEngine(settings, store, DryRunExecutor())
+    action = PlannedAction("inspect_region", {"region": "resources"})
+    first_plan = ActionPlan("cycle one", [action])
+    second_plan = ActionPlan("cycle two", [action])
+    assert engine.execute_plan(first_plan)[0]["status"] == "simulated"
+    assert engine.execute_plan(first_plan)[0]["status"] == "skipped_duplicate"
+    assert engine.execute_plan(second_plan)[0]["status"] == "simulated"
+
+
 def test_safety_gate_blocks_critical_and_pause(store: SQLiteStore, tmp_path: Path) -> None:
     settings = Settings(db_path=tmp_path / "governor.db")
     engine = ActionEngine(settings, store, DryRunExecutor())
