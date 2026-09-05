@@ -160,4 +160,4 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Support toggle and separate open/close targets without persisting pixel coordinates.
 - [x] Add calibration/E2E/resolver regression tests and run pytest/compileall/diff check.
 - [x] Run OPEN calibration only while the menu is currently open; stop for manual CLOSED-state transition.
-- [ ] Commit/push only after the requested two-state calibration and CI checks succeed; never arm Live or run e2e-build-menu.
+- [x] Commit/push only after the requested two-state calibration and CI checks succeed; never arm Live or run e2e-build-menu.
