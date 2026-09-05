@@ -115,7 +115,7 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Refuse SendInput when the exact game window is not the foreground window; never auto-focus another application.
 - [x] Publish the first whitelist of game skills for menu, tabs, camera, speed, finance/technology/policy, save, and dialog controls.
 - [x] Add regression tests proving invalid live actions are blocked before the executor and foreground mismatches emit no input.
-- [ ] Add local ROI/frame change filtering so unchanged regions do not call DeepSeek Vision.
+- [x] Add local ROI/frame change filtering so unchanged regions do not call DeepSeek Vision.
 - [ ] Add calibrated UI bounding-box output and a resolver from UI elements to skill commands.
 - [ ] Add Feishu screenshot upload and explicit remote decision reply handling.
 - [ ] Add CI and a separately gated real Steam E2E harness; real E2E remains unverified until the game is running with calibrated UI/profile data.

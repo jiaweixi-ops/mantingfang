@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Iterable
+import hashlib
+import time
+from dataclasses import dataclass, field
+from typing import Callable, Iterable
 
 from .actions import ActionEngine, DryRunExecutor
 from .capture import ClientAreaCapture, Win32ClientCaptureBackend
@@ -29,13 +31,45 @@ class SteamVisionObservationSource:
     capture: ClientAreaCapture
     perception: PerceptionEngine
     regions: tuple[str, ...] = ("resources", "map", "events")
+    force_refresh_seconds: float = 60.0
+    clock: Callable[[], float] = time.monotonic
+    _cache: dict[str, tuple[str, float, object]] = field(default_factory=dict, init=False, repr=False)
+    last_changed_regions: tuple[str, ...] = field(default_factory=tuple, init=False)
 
     def observe(self):
         frame = self.capture.capture()
-        return [
-            self.perception.observe_rgba(frame.rgba, frame.width, frame.height, region, context="Governor 运行时状态采集")
-            for region in self.regions
-        ]
+        now = self.clock()
+        observations = []
+        changed: list[str] = []
+        for region_name in self.regions:
+            digest = self._region_digest(frame.rgba, frame.width, frame.height, region_name)
+            cached = self._cache.get(region_name)
+            if cached is not None:
+                cached_digest, analyzed_at, observation = cached
+                if digest == cached_digest and now - analyzed_at < self.force_refresh_seconds:
+                    observations.append(observation)
+                    continue
+            observation = self.perception.observe_rgba(
+                frame.rgba,
+                frame.width,
+                frame.height,
+                region_name,
+                context="Governor 运行时状态采集",
+            )
+            self._cache[region_name] = (digest, now, observation)
+            observations.append(observation)
+            changed.append(region_name)
+        self.last_changed_regions = tuple(changed)
+        return observations
+
+    def _region_digest(self, rgba: bytes, width: int, height: int, region_name: str) -> str:
+        left, top, right, bottom = self.perception.regions.get(region_name).crop_box(width, height)
+        digest = hashlib.sha256()
+        for row in range(top, bottom):
+            start = (row * width + left) * 4
+            end = (row * width + right) * 4
+            digest.update(rgba[start:end])
+        return digest.hexdigest()
 
 
 @dataclass

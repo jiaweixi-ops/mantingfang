@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from ai_governor.actions import ActionEngine, DryRunExecutor
-from ai_governor.capture import ClientAreaCapture, encode_rgba_png
+from ai_governor.capture import CapturedFrame, ClientAreaCapture, encode_rgba_png
 from ai_governor.input import DryRunInputAdapter, InputCommand, InputDisabled, WindowsSendInputAdapter
 from ai_governor.loop import CompositeObservationSource, GovernorLoop
 from ai_governor.config import Settings
@@ -24,6 +24,7 @@ from ai_governor.models import ActionPlan, Goal, MajorEvent, Observation, Planne
 from ai_governor.memory import MemoryAccessError, MemoryProfile, MemorySampler
 from ai_governor.perception import PerceptionEngine, RegionCatalog
 from ai_governor.reporting import ReportService
+from ai_governor.runtime import SteamVisionObservationSource
 from ai_governor.storage import SQLiteStore
 from ai_governor.state import StateAggregator
 from ai_governor.supervisor import GovernorSupervisor
@@ -482,6 +483,48 @@ def test_perception_crops_rgba_before_analysis() -> None:
     assert observation.data["crop_box"] == (0, 0, 30, 16)
     assert analyzer.last_image.startswith(b"\x89PNG\r\n\x1a\n")
     assert struct.unpack(">II", analyzer.last_image[16:24]) == (30, 16)
+
+
+def test_steam_vision_source_reuses_unchanged_roi_analysis() -> None:
+    class Capture:
+        def __init__(self) -> None:
+            self.rgba = bytes((1, 2, 3, 255)) * (100 * 100)
+
+        def capture(self):
+            return CapturedFrame(100, 100, b"frame", self.rgba)
+
+    class Perception:
+        regions = RegionCatalog()
+
+        def __init__(self):
+            self.calls = []
+
+        def observe_rgba(self, rgba, width, height, region_name, *, context=""):
+            self.calls.append(region_name)
+            return Observation({"region_value": region_name}, source="deepseek-vision", region=region_name)
+
+    clock_value = [0.0]
+    perception = Perception()
+    source = SteamVisionObservationSource(
+        Capture(),
+        perception,
+        ("resources", "map"),
+        force_refresh_seconds=60.0,
+        clock=lambda: clock_value[0],
+    )
+    first = source.observe()
+    second = source.observe()
+    assert perception.calls == ["resources", "map"]
+    assert second == first
+    assert source.last_changed_regions == ()
+
+    changed = bytearray(source.capture.rgba)
+    changed[0:4] = bytes((9, 9, 9, 255))
+    source.capture.rgba = bytes(changed)
+    third = source.observe()
+    assert perception.calls == ["resources", "map", "resources"]
+    assert source.last_changed_regions == ("resources",)
+    assert third[1] is first[1]
 
 
 def test_region_boxes_are_resolution_independent() -> None:
