@@ -74,6 +74,17 @@ def test_feishu_commands_are_on_demand_and_major_events_push(store: SQLiteStore)
     assert len(transport.sent) == 3
 
 
+def test_decision_event_pauses_before_notification(store: SQLiteStore) -> None:
+    router = CommandRouter(store, ReportService(store), Watchdog(store))
+    transport = NullFeishuTransport()
+    gateway = FeishuGateway(router, transport)
+    event = MajorEvent("重大剧情", "请选择方案", requires_decision=True)
+    message = gateway.notify_major_event(event)
+    assert store.get_runtime("paused") is True
+    assert store.recent_events(1)[0]["title"] == "重大剧情"
+    assert "系统已暂停" in message
+
+
 def test_goal_change_replaces_previous_long_term_goal(store: SQLiteStore) -> None:
     router = CommandRouter(store, ReportService(store), Watchdog(store))
     router.handle("修改目标 人口达到1000")

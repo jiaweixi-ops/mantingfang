@@ -43,3 +43,5 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Task 4 first test attempt found a ctypes nested-structure scope error; moved the Win32 structs to module scope before retrying.
 - V0.2 Task 4 complete: added policy-gated dry-run and Windows SendInput adapters with normalized client coordinates; live input remains disabled by default and is not wired into Governor. Tests: 21 passed; compileall passed. Task 5 is next: post-action verification.
 - V0.2 Task 5 complete: added injectable action verification and `ScreenshotVerifier`; verification failure records `uncertain` and sets `recovery_required`. Tests: 23 passed; compileall passed. Task 6 is next: pause before major-event notification.
+- V0.2 Task 6 implementation in progress: major-event notifications now persist the event and pause the Watchdog before sending when `requires_decision` is true.
+- V0.2 Task 6 complete: decision events now persist and pause before notification. Tests: 24 passed; compileall passed. Task 7 is next: scoped action idempotency.

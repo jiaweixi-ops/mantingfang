@@ -61,6 +61,9 @@ class FeishuGateway:
         return response
 
     def notify_major_event(self, event: MajorEvent) -> str:
+        self.router.store.add_event(event)
+        if event.requires_decision:
+            self.router.watchdog.pause("major event requires user decision")
         prefix = "🔴" if event.requires_decision else ("🟡" if event.severity.value == "important" else "🟢")
         text = f"{prefix} {event.title}\n{event.body}"
         if event.requires_decision:

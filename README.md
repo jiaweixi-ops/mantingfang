@@ -67,4 +67,4 @@ py -3 -m ai_governor.cli capture --out screenshots/current.png
 
 `WindowsSendInputAdapter` 默认关闭；Task 4 只提供能力和策略边界，未将 live click/keyboard 接入 Governor。校准阶段使用 `DryRunInputAdapter`，不会向系统发送输入。
 
-动作引擎可以注入 `ScreenshotVerifier`。验证要求窗口仍存在、客户区未最小化且能够重新捕获 PNG；验证异常会把动作标记为 `uncertain` 并触发恢复态。
+动作引擎可以注入 `ScreenshotVerifier`。验证要求窗口仍存在、客户区未最小化且能够重新捕获 PNG；验证异常会把动作标记为 `uncertain` 并触发恢复态。需要人工决策的重大事件会先持久化并暂停 Watchdog，再发送飞书通知。
