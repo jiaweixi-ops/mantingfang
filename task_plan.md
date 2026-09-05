@@ -118,4 +118,5 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Add local ROI/frame change filtering so unchanged regions do not call DeepSeek Vision.
 - [x] Add calibrated UI bounding-box output and a resolver from UI elements to skill commands.
 - [x] Add Feishu screenshot upload and explicit remote decision reply handling.
-- [ ] Add CI and a separately gated real Steam E2E harness; real E2E remains unverified until the game is running with calibrated UI/profile data.
+- [x] Add CI for the source-level safety and integration checks.
+- [ ] Add a separately gated real Steam E2E harness; real E2E remains unverified until the game is running with calibrated UI/profile data.
