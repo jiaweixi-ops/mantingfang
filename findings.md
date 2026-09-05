@@ -19,3 +19,4 @@
 - Use typed dataclasses and JSON validation at boundaries instead of passing arbitrary model output to an executor.
 - Default all execution to dry-run and require explicit configuration for real input injection.
 - Memory profiles are explicit JSON with process name, module, pointer size, pointer offsets, and scalar types; invalid profiles and missing processes fail closed.
+- Latest acceptance confirmed the V0.1 foundation is valid but only about 35–40% of the full automation goal. The first V0.2 integration task is the Steam Window Adapter; live input, screenshot capture, real profiles, loop, Feishu transport, and verification remain separate tasks.

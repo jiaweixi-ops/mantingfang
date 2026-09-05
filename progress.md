@@ -30,4 +30,7 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Added repository-local identity `jiaweixi-ops <jiaweixi-ops@users.noreply.github.com>` and `origin=https://github.com/jiaweixi-ops/mantingfang.git`; `git ls-remote` reached the remote without listing existing heads.
 - First implementation commit was pushed successfully to `origin/main` using the already authenticated GitHub CLI token through a process-only HTTP header; the token was not printed or persisted.
 - Delivery-record update was pushed as `67df155`.
-- Final post-push verification passed: local `main` tracks `origin/main`, remote `refs/heads/main` points to `67df155bea6f7d4e1baae611a39235a0541299fa`, and the working tree is clean.
+- Final post-push verification passed for the foundation; local `main` tracked `origin/main` and the working tree was clean.
+- Latest referenced-conversation acceptance reviewed: V0.1 Foundation passes, formal autonomous game control does not yet pass. Began V0.2 Task 1, Steam Window Adapter, as a separately verifiable and pushable change.
+- V0.2 Task 1 complete: added Win32 window discovery, client-area geometry, client-to-screen normalized coordinates, minimized-state inspection/restoration, and `window-info` CLI diagnostics. Tests: 16 passed; compileall passed; live window check safely reported no matching game window.
+- Created commit `348146d` for V0.2 Task 1. The first direct push attempt hit a Schannel TLS handshake failure; retrying through the configured GitHub proxy without disabling TLS verification.

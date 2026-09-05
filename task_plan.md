@@ -59,6 +59,7 @@ Build the first usable, safe local foundation for the Steam AI Governor describe
 | Example memory profile initially leaked a process-not-found traceback | 1 | Include `sampler.sample()` in CLI fail-closed error handling |
 | `git commit` cannot determine author identity | 1 | Resolved by setting repository-local `jiaweixi-ops` GitHub no-reply identity |
 | `git remote -v` is empty | 1 | Resolved by adding the user-provided GitHub URL as `origin` |
+| Direct GitHub push hit Schannel TLS handshake failure | 1 | Use the machine's configured GitHub proxy URL for this push attempt; do not disable TLS verification |
 
 ## New memory-scan acceptance checks
 
@@ -70,3 +71,24 @@ Build the first usable, safe local foundation for the Steam AI Governor describe
 ## Next action
 
 Keep the local worktree clean and use the pushed foundation as the baseline for game-specific profile calibration.
+
+## V0.2 Game Integration backlog from latest acceptance
+
+Execute and push each item as its own verified task:
+
+1. [x] Steam Window Adapter: locate the exact game window, read client bounds, handle minimized state, and expose normalized client coordinates.
+2. [ ] Real client-area screenshot capture.
+3. [ ] Actual ROI image cropping before DeepSeek Vision.
+4. [ ] Windows `SendInput` adapter, initially limited to explicitly safe dry-run/calibration actions.
+5. [ ] Post-action screenshot/state verification.
+6. [ ] Fix major-event pause ordering and ensure the watchdog is paused before notification.
+7. [ ] Replace permanent action de-duplication with scoped idempotency.
+8. [ ] Add a long-running Governor loop with change detection and recovery.
+9. [ ] Add a real Feishu custom-app transport boundary.
+10. [ ] Calibrate the first real read-only memory fields for the installed game build.
+11. [ ] Aggregate memory and vision observations into a canonical GameState.
+12. [ ] Add stronger strategy/reporting/watchdog features after integration is observable.
+
+### Current V0.2 task
+
+Task 2 — Real client-area screenshot capture.

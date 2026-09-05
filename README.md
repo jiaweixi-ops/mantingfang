@@ -36,6 +36,7 @@ src/ai_governor/
   deepseek.py      唯一 AI provider 适配器
   feishu.py        双向命令/主动通知边界
   memory.py        Windows 只读内存采样与 profile 校验
+  window.py        Steam 窗口查找、客户区和归一化坐标
   models.py        状态、目标、动作、事件模型
   perception.py    区域化视觉接口
   reporting.py     状态/日报
@@ -51,6 +52,9 @@ profiles/          用户维护的只读内存 profile 说明
 $env:PYTHONPATH = "src"
 py -3 -m ai_governor.cli memory-processes
 py -3 -m ai_governor.cli memory-read --profile profiles/songhua.memory.example.json
+py -3 -m ai_governor.cli window-info
 ```
 
 示例 profile 只用于验证配置格式，不能读取真实游戏；`memory-read` 只在你提供了真实、经过校准的 profile 后才有意义。当前仓库不包含猜测性的游戏地址。
+
+`window-info` 只检查窗口和客户区，不会激活、点击或输入游戏。

@@ -16,6 +16,7 @@ from ai_governor.perception import PerceptionEngine, RegionCatalog
 from ai_governor.reporting import ReportService
 from ai_governor.storage import SQLiteStore
 from ai_governor.watchdog import Watchdog
+from ai_governor.window import SteamWindowAdapter, WindowNotFound
 
 
 @pytest.fixture
@@ -173,3 +174,49 @@ def test_memory_sampler_fails_when_process_is_missing() -> None:
     profile = MemoryProfile.from_dict({"process_name": "missing.exe", "fields": {"x": {"type": "int32"}}})
     with pytest.raises(MemoryAccessError, match="process not found"):
         MemorySampler(profile, Missing(), FakeMemoryBackend()).sample()
+
+
+class FakeWindowBackend:
+    def __init__(self, minimized: bool = False) -> None:
+        self.minimized = minimized
+        self.restored = False
+
+    def find_window(self, title: str):
+        return 99
+
+    def is_window(self, hwnd: int) -> bool:
+        return hwnd == 99
+
+    def is_minimized(self, hwnd: int) -> bool:
+        return self.minimized and not self.restored
+
+    def restore(self, hwnd: int) -> None:
+        self.restored = True
+
+    def client_rect(self, hwnd: int):
+        return (0, 0, 1920, 1080)
+
+    def client_to_screen(self, hwnd: int, x: int, y: int):
+        return (100 + x, 50 + y)
+
+
+def test_window_adapter_returns_client_geometry_and_normalized_point() -> None:
+    info = SteamWindowAdapter("满庭芳：宋上繁华", FakeWindowBackend()).locate()
+    assert info.client_width == 1920
+    assert info.client_height == 1080
+    assert info.screen_point(0.5, 0.5) == (1060, 590)
+
+
+def test_window_adapter_can_restore_minimized_window() -> None:
+    backend = FakeWindowBackend(minimized=True)
+    info = SteamWindowAdapter("满庭芳：宋上繁华", backend).locate(restore_minimized=True)
+    assert backend.restored is True
+    assert info.minimized is False
+
+
+def test_window_adapter_fails_closed_when_window_is_missing() -> None:
+    class MissingWindow(FakeWindowBackend):
+        def find_window(self, title: str):
+            return None
+    with pytest.raises(WindowNotFound, match="window not found"):
+        SteamWindowAdapter("missing", MissingWindow()).locate()
