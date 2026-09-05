@@ -1,0 +1,175 @@
+from __future__ import annotations
+
+import json
+import struct
+from pathlib import Path
+
+import pytest
+
+from ai_governor.actions import ActionEngine, DryRunExecutor
+from ai_governor.config import Settings
+from ai_governor.feishu import CommandRouter, NullFeishuTransport, FeishuGateway
+from ai_governor.governor import Governor
+from ai_governor.models import ActionPlan, Goal, MajorEvent, Observation, PlannedAction, RiskLevel
+from ai_governor.memory import MemoryAccessError, MemoryProfile, MemorySampler
+from ai_governor.perception import PerceptionEngine, RegionCatalog
+from ai_governor.reporting import ReportService
+from ai_governor.storage import SQLiteStore
+from ai_governor.watchdog import Watchdog
+
+
+@pytest.fixture
+def store(tmp_path: Path) -> SQLiteStore:
+    value = SQLiteStore(tmp_path / "governor.db")
+    yield value
+    value.close()
+
+
+def test_store_round_trip_and_report(store: SQLiteStore) -> None:
+    store.add_observation(Observation({"population": 826, "grain": 4200}, source="test", region="resources", confidence=0.95))
+    store.add_goal(Goal("人口达到 1000", target={"population": 1000}))
+    report = ReportService(store).daily_report()
+    assert "826" in report
+    assert "人口达到 1000" in report
+
+
+def test_action_engine_is_dry_run_and_idempotent(store: SQLiteStore, tmp_path: Path) -> None:
+    settings = Settings(db_path=tmp_path / "governor.db")
+    engine = ActionEngine(settings, store, DryRunExecutor())
+    action = PlannedAction("inspect_region", {"region": "resources"}, RiskLevel.SAFE, idempotency_key="once")
+    plan = ActionPlan("read resources", [action])
+    first = engine.execute_plan(plan)
+    second = engine.execute_plan(plan)
+    assert first[0]["status"] == "simulated"
+    assert second[0]["status"] == "skipped_duplicate"
+    assert store.action_by_key("once")["status"] == "simulated"
+
+
+def test_safety_gate_blocks_critical_and_pause(store: SQLiteStore, tmp_path: Path) -> None:
+    settings = Settings(db_path=tmp_path / "governor.db")
+    engine = ActionEngine(settings, store, DryRunExecutor())
+    critical = PlannedAction("choose_story_option", {"option": 2}, RiskLevel.CRITICAL, idempotency_key="story-2")
+    result = engine.execute_plan(ActionPlan("event", [critical]))
+    assert result[0]["status"] == "blocked"
+    Watchdog(store).pause()
+    safe = PlannedAction("inspect_region", {}, RiskLevel.SAFE, idempotency_key="paused")
+    assert engine.execute_plan(ActionPlan("paused", [safe]))[0]["status"] == "blocked"
+
+
+def test_feishu_commands_are_on_demand_and_major_events_push(store: SQLiteStore) -> None:
+    reports = ReportService(store)
+    watchdog = Watchdog(store)
+    router = CommandRouter(store, reports, watchdog)
+    transport = NullFeishuTransport()
+    gateway = FeishuGateway(router, transport)
+    assert "日报" in gateway.on_text_message("获取日报")
+    assert "已暂停" in gateway.on_text_message("暂停托管")
+    assert store.get_runtime("paused") is True
+    event = MajorEvent("阶段目标完成", "人口达到 1000", requires_decision=False)
+    assert "阶段目标完成" in gateway.notify_major_event(event)
+    assert len(transport.sent) == 3
+
+
+def test_goal_change_replaces_previous_long_term_goal(store: SQLiteStore) -> None:
+    router = CommandRouter(store, ReportService(store), Watchdog(store))
+    router.handle("修改目标 人口达到1000")
+    router.handle("修改目标 财政保持正增长")
+    assert [goal["title"] for goal in store.active_goals()] == ["财政保持正增长"]
+
+
+class FakeBrain:
+    def __init__(self, response: dict) -> None:
+        self.response = response
+
+    def complete_json(self, messages, *, model=None, temperature=0):
+        assert messages[0]["role"] == "system"
+        return self.response
+
+
+def test_governor_runs_persisted_safe_cycle(store: SQLiteStore, tmp_path: Path) -> None:
+    settings = Settings(db_path=tmp_path / "governor.db")
+    response = {"reason": "inspect", "actions": [{"action_type": "inspect_region", "payload": {"region": "resources"}}]}
+    engine = ActionEngine(settings, store, DryRunExecutor())
+    result = Governor(store, FakeBrain(response), engine, Watchdog(store)).run_cycle(Observation({"population": 8}))
+    assert result["status"] == "executed"
+    assert result["results"][0]["status"] == "simulated"
+
+
+def test_governor_halts_on_invalid_brain_response(store: SQLiteStore, tmp_path: Path) -> None:
+    settings = Settings(db_path=tmp_path / "governor.db")
+    engine = ActionEngine(settings, store, DryRunExecutor())
+    result = Governor(store, FakeBrain({"actions": "not-a-list"}), engine, Watchdog(store)).run_cycle(Observation({}))
+    assert result["status"] == "needs_recovery"
+    assert store.get_runtime("paused") is True
+
+
+class FakeAnalyzer:
+    def analyze_image_json(self, image: bytes, prompt: str, *, model: str | None = None) -> dict:
+        assert image == b"frame"
+        assert "只读取人口" in prompt
+        return {"population": 10, "confidence": 0.9}
+
+
+def test_perception_uses_task_region() -> None:
+    engine = PerceptionEngine(FakeAnalyzer(), RegionCatalog())
+    observation = engine.observe(b"frame", "resources", context="检查资源")
+    assert observation.region == "resources"
+    assert observation.data["population"] == 10
+
+
+def test_region_boxes_are_resolution_independent() -> None:
+    region = RegionCatalog().get("resources")
+    assert region.crop_box(1920, 1080) == (0, 0, 576, 173)
+
+
+class FakeMemoryBackend:
+    def open_process(self, pid: int):
+        return "handle"
+
+    def close_process(self, handle) -> None:
+        pass
+
+    def module_base(self, pid: int, module_name: str) -> int:
+        return 0x1000
+
+    def read(self, handle, address: int, size: int) -> bytes:
+        values = {
+            0x1020: struct.pack("<Q", 0x2000),
+            0x2010: struct.pack("<i", 1234),
+        }
+        return values[address][:size]
+
+
+class FakeProcesses:
+    def find(self, process_name: str):
+        from ai_governor.memory import ProcessInfo
+        return ProcessInfo(42, process_name)
+
+
+def test_read_only_memory_profile_resolves_typed_pointer_path() -> None:
+    profile = MemoryProfile.from_dict({
+        "process_name": "game.exe",
+        "fields": {"population": {"type": "int32", "base_offset": "0x20", "offsets": ["0x0", "0x10"]}},
+    })
+    result = MemorySampler(profile, FakeProcesses(), FakeMemoryBackend()).sample()
+    assert result["values"] == {"population": 1234}
+    assert result["errors"] == {}
+
+
+def test_memory_profile_rejects_unknown_type() -> None:
+    with pytest.raises(ValueError, match="unsupported type"):
+        MemoryProfile.from_dict({"process_name": "game.exe", "fields": {"money": {"type": "string"}}})
+
+
+def test_memory_profile_rejects_invalid_pointer_size() -> None:
+    with pytest.raises(ValueError, match="pointer_size"):
+        MemoryProfile.from_dict({"process_name": "game.exe", "pointer_size": 16, "fields": {"x": {"type": "int32"}}})
+
+
+def test_memory_sampler_fails_when_process_is_missing() -> None:
+    class Missing:
+        def find(self, process_name: str):
+            return None
+    profile = MemoryProfile.from_dict({"process_name": "missing.exe", "fields": {"x": {"type": "int32"}}})
+    with pytest.raises(MemoryAccessError, match="process not found"):
+        MemorySampler(profile, Missing(), FakeMemoryBackend()).sample()

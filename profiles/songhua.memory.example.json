@@ -1,0 +1,12 @@
+{
+  "process_name": "<exact-game-process>.exe",
+  "pointer_size": 8,
+  "fields": {
+    "population": {
+      "type": "int32",
+      "module": "<module-name>.dll",
+      "base_offset": "0x0",
+      "offsets": []
+    }
+  }
+}
