@@ -87,7 +87,7 @@ class GovernorRuntime:
     governor: Governor
 
 
-def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str] = ("resources", "map", "events")) -> GovernorRuntime:
+def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str] = ("resources", "map", "events", "build_menu", "dialog")) -> GovernorRuntime:
     if not settings.deepseek_api_key:
         raise DeepSeekConfigurationError("DEEPSEEK_API_KEY is not configured; run requires a real DeepSeek endpoint")
     if not settings.deepseek_reasoning_model:
@@ -110,15 +110,31 @@ def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str]
         sources.append(MemoryObservationSource(MemorySampler(profile, WindowsProcessEnumerator(), WindowsMemoryBackend())))
     source = CompositeObservationSource(tuple(sources))
     aggregator = StateAggregator()
+    latest_ui_elements: dict[str, dict] = {}
 
     def observe_state() -> dict:
-        return aggregator.aggregate(source.observe()).to_dict()["values"]
+        state = aggregator.aggregate(source.observe()).to_dict()["values"]
+        latest_ui_elements.clear()
+        elements = state.get("ui_elements")
+        if isinstance(elements, list):
+            for element in elements:
+                if isinstance(element, dict) and isinstance(element.get("id"), str):
+                    latest_ui_elements[element["id"]] = element
+        return state
+
+    def resolve_ui_element(element_id: str) -> dict | None:
+        if element_id not in latest_ui_elements:
+            # The first Governor observation may happen before a live action is
+            # preflighted. Reuse the local ROI cache and refresh this resolver
+            # view without forcing unnecessary Vision calls.
+            observe_state()
+        return latest_ui_elements.get(element_id)
 
     if settings.execution_mode == "dry-run":
         executor = DryRunExecutor()
         verifier = None
     else:
-        translator = SkillTranslator()
+        translator = SkillTranslator(ui_element_supplier=resolve_ui_element)
         adapter = WindowsSendInputAdapter(
             window,
             Win32SendInputBackend(),

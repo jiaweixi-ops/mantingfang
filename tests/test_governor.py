@@ -153,11 +153,25 @@ def test_live_skill_preflight_translates_before_input() -> None:
     action = PlannedAction(
         "OPEN_BUILD_MENU",
         {
-            "commands": [{"kind": "key_down", "key": 27}],
+            "target_element": "build",
             "changed_fields": ["menu"],
         },
     )
-    SkillTranslator().validate_live(action)
+    SkillTranslator(ui_element_supplier=lambda _: {"bbox": [0.1, 0.2, 0.3, 0.4]}).validate_live(action)
+
+
+def test_skill_translator_resolves_command_from_observed_ui_element() -> None:
+    action = PlannedAction(
+        "OPEN_BUILD_MENU",
+        {"target_element": "build", "changed_fields": ["menu"]},
+    )
+    translator = SkillTranslator(
+        ui_element_supplier=lambda element_id: {"id": element_id, "bbox": [0.1, 0.2, 0.3, 0.4]}
+    )
+    command = translator.translate(action)[0]
+    assert command.kind == "click"
+    assert command.x_ratio == pytest.approx(0.2)
+    assert command.y_ratio == pytest.approx(0.3)
 
 
 def test_action_engine_blocks_live_action_before_executor_on_bad_contract(store: SQLiteStore, tmp_path: Path) -> None:
@@ -474,6 +488,25 @@ def test_perception_uses_task_region() -> None:
     observation = engine.observe(b"frame", "resources", context="检查资源")
     assert observation.region == "resources"
     assert observation.data["population"] == 10
+
+
+def test_perception_normalizes_valid_ui_elements() -> None:
+    class Analyzer(FakeAnalyzer):
+        def analyze_image_json(self, image, prompt, *, model=None):
+            return {"ui_elements": [{"id": "build", "label": "建造", "bbox": [0.1, 0.2, 0.3, 0.4]}]}
+
+    observation = PerceptionEngine(Analyzer(), RegionCatalog()).observe(b"frame", "build_menu")
+    assert observation.data["ui_elements"][0]["id"] == "build"
+    assert observation.data["ui_elements"][0]["bbox"] == [0.1, 0.2, 0.3, 0.4]
+
+
+def test_perception_rejects_invalid_ui_element_bbox() -> None:
+    class Analyzer(FakeAnalyzer):
+        def analyze_image_json(self, image, prompt, *, model=None):
+            return {"ui_elements": [{"id": "build", "bbox": [0.8, 0.2, 0.3, 0.4]}]}
+
+    with pytest.raises(ValueError, match="normalized coordinates"):
+        PerceptionEngine(Analyzer(), RegionCatalog()).observe(b"frame", "build_menu")
 
 
 def test_perception_crops_rgba_before_analysis() -> None:

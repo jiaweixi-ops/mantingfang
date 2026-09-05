@@ -159,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
                 print("ERROR: --interval must be non-negative", file=sys.stderr)
                 return 2
             try:
-                regions = args.regions or ("resources", "map", "events")
+                regions = args.regions or ("resources", "map", "events", "build_menu", "dialog")
                 runtime = build_runtime(settings, store, regions)
                 runtime.loop.interval_seconds = args.interval
                 if args.supervise:

@@ -67,6 +67,8 @@ class InputAdapter(Protocol):
 class SkillTranslator:
     """Translate only explicit, schema-checked game skills into input commands."""
 
+    ui_element_supplier: Callable[[str], dict[str, Any] | None] | None = None
+
     @staticmethod
     def supported_skills() -> tuple[str, ...]:
         return GAME_SKILLS
@@ -79,6 +81,11 @@ class SkillTranslator:
 
     def translate(self, action: PlannedAction) -> list[InputCommand]:
         payload = action.payload
+        if action.action_type in GAME_SKILLS:
+            # High-level Skills may only resolve through observed UI elements.
+            # Raw coordinates/command arrays are reserved for the low-level
+            # bridge and are not accepted as a strategic Skill payload.
+            return [self._command_from_ui_element(action)]
         raw_commands = payload.get("commands")
         if raw_commands is not None:
             if not isinstance(raw_commands, list) or not raw_commands:
@@ -86,11 +93,30 @@ class SkillTranslator:
             return [self._command(item) for item in raw_commands]
         if action.action_type in {"move", "click", "key_down", "key_up"}:
             return [self._command({"kind": action.action_type, **payload})]
-        if action.action_type in GAME_SKILLS:
-            raise SkillTranslationError(
-                f"game skill {action.action_type} requires calibrated commands from UI perception"
-            )
         raise SkillTranslationError(f"unsupported game skill: {action.action_type}")
+
+    def _command_from_ui_element(self, action: PlannedAction) -> InputCommand:
+        target_id = action.payload.get("target_element")
+        if not isinstance(target_id, str) or not target_id.strip():
+            raise SkillTranslationError(
+                f"game skill {action.action_type} requires target_element from UI perception"
+            )
+        if self.ui_element_supplier is None:
+            raise SkillTranslationError("UI element resolver is not configured")
+        element = self.ui_element_supplier(target_id.strip())
+        if not isinstance(element, dict):
+            raise SkillTranslationError(f"UI element not found: {target_id}")
+        bbox = element.get("bbox")
+        if not isinstance(bbox, list) or len(bbox) != 4:
+            raise SkillTranslationError(f"UI element has invalid bbox: {target_id}")
+        left, top, right, bottom = bbox
+        try:
+            x_ratio = (float(left) + float(right)) / 2
+            y_ratio = (float(top) + float(bottom)) / 2
+        except (TypeError, ValueError) as exc:
+            raise SkillTranslationError(f"UI element bbox is not numeric: {target_id}") from exc
+        command_kind = action.payload.get("command_kind", "click")
+        return self._command({"kind": command_kind, "x_ratio": x_ratio, "y_ratio": y_ratio})
 
     def _command(self, raw: Any) -> InputCommand:
         if not isinstance(raw, dict) or not isinstance(raw.get("kind"), str):

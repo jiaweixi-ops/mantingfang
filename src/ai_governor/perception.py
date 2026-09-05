@@ -75,14 +75,45 @@ class PerceptionEngine:
             f"任务上下文：{context or '读取当前区域状态'}\n"
             f"关注区域：{region.name}\n{region.focus_instruction}\n"
             "只返回可从图像确认的事实，未知值使用 null；返回 JSON。"
+            "如果看见可操作控件，额外返回 ui_elements 数组；每项必须是"
+            "{id: string, label: string, bbox: [left, top, right, bottom]}，"
+            "bbox 是相对于当前裁剪图的 0 到 1 归一化坐标，不要猜测不可见控件。"
         )
         result = self.analyzer.analyze_image_json(frame, prompt, model=self.model)
+        result = self._normalize_ui_elements(result)
         confidence = result.get("confidence")
         if confidence is not None and not isinstance(confidence, (int, float)):
             raise ValueError("vision confidence must be numeric")
         if crop_box is not None:
             result = {**result, "crop_box": crop_box}
         return Observation(data=result, source="deepseek-vision", region=region.name, confidence=confidence)
+
+    @staticmethod
+    def _normalize_ui_elements(result: dict[str, Any]) -> dict[str, Any]:
+        raw_elements = result.get("ui_elements")
+        if raw_elements is None:
+            return result
+        if not isinstance(raw_elements, list):
+            raise ValueError("vision ui_elements must be a list")
+        normalized: list[dict[str, Any]] = []
+        for item in raw_elements:
+            if not isinstance(item, dict):
+                raise ValueError("each ui element must be an object")
+            element_id = item.get("id")
+            bbox = item.get("bbox")
+            if not isinstance(element_id, str) or not element_id.strip():
+                raise ValueError("each ui element requires a non-empty id")
+            if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+                raise ValueError("ui element bbox must be [left, top, right, bottom]")
+            try:
+                values = [float(value) for value in bbox]
+            except (TypeError, ValueError) as exc:
+                raise ValueError("ui element bbox values must be numeric") from exc
+            left, top, right, bottom = values
+            if not 0 <= left < right <= 1 or not 0 <= top < bottom <= 1:
+                raise ValueError("ui element bbox must use normalized coordinates between 0 and 1")
+            normalized.append({**item, "id": element_id.strip(), "bbox": values})
+        return {**result, "ui_elements": normalized}
 
 
 class StaticFrameSource:
