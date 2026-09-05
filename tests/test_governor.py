@@ -23,6 +23,7 @@ from ai_governor.perception import PerceptionEngine, RegionCatalog
 from ai_governor.reporting import ReportService
 from ai_governor.storage import SQLiteStore
 from ai_governor.state import StateAggregator
+from ai_governor.supervisor import GovernorSupervisor
 from ai_governor.watchdog import Watchdog
 from ai_governor.window import SteamWindowAdapter, WindowNotFound
 from ai_governor.skills import InputActionExecutor, SkillTranslationError, SkillTranslator
@@ -200,6 +201,27 @@ def test_governor_loop_enters_recovery_after_repeated_sensor_errors(store: SQLit
     cycles = loop.run(max_cycles=5)
     assert [cycle.status for cycle in cycles] == ["observation_error", "needs_recovery"]
     assert store.get_runtime("recovery_required") is True
+
+
+def test_supervisor_restarts_unexpected_loop_crash_with_bounded_backoff(store: SQLiteStore) -> None:
+    attempts = []
+    sleeps = []
+
+    class HealthyLoop:
+        def run(self, **kwargs):
+            return [type("Cycle", (), {"status": "changed"})()]
+
+    def factory():
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise RuntimeError("temporary loop crash")
+        return HealthyLoop()
+
+    supervisor = GovernorSupervisor(factory, store, Watchdog(store), max_restarts=2, backoff_seconds=2, sleep_fn=sleeps.append)
+    result = supervisor.run(max_cycles=1)
+    assert len(result) == 1
+    assert attempts == [1, 1]
+    assert sleeps == [2]
 
 
 class FakeFeishuHttp:

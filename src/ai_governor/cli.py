@@ -23,6 +23,7 @@ from .window import SteamWindowAdapter, Win32WindowBackend, WindowError
 from .reporting import ReportService
 from .runtime import RuntimeConfigurationError, build_runtime
 from .storage import SQLiteStore
+from .supervisor import GovernorSupervisor
 from .watchdog import Watchdog
 
 
@@ -45,6 +46,9 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--max-cycles", type=int, help="stop after this many cycles; omit for continuous run")
     run.add_argument("--interval", type=float, default=10.0, help="seconds between cycles")
     run.add_argument("--region", action="append", dest="regions", help="vision region; repeat for multiple regions")
+    run.add_argument("--supervise", action="store_true", help="restart unexpected loop crashes with bounded backoff")
+    run.add_argument("--restart-limit", type=int, default=3)
+    run.add_argument("--restart-backoff", type=float, default=5.0)
     sub.add_parser("memory-processes", help="list Windows processes for profile calibration")
     memory_modules = sub.add_parser("memory-modules", help="list loaded modules for one Windows process")
     memory_modules.add_argument("--process-name", required=True, help="exact process name, for example Song.exe")
@@ -155,9 +159,20 @@ def main(argv: list[str] | None = None) -> int:
                 print("ERROR: --interval must be non-negative", file=sys.stderr)
                 return 2
             try:
-                runtime = build_runtime(settings, store, args.regions or ("resources", "map", "events"))
+                regions = args.regions or ("resources", "map", "events")
+                runtime = build_runtime(settings, store, regions)
                 runtime.loop.interval_seconds = args.interval
-                cycles = runtime.loop.run(max_cycles=args.max_cycles)
+                if args.supervise:
+                    supervisor = GovernorSupervisor(
+                        lambda: build_runtime(settings, store, regions).loop,
+                        store,
+                        Watchdog(store),
+                        max_restarts=args.restart_limit,
+                        backoff_seconds=args.restart_backoff,
+                    )
+                    cycles = supervisor.run(max_cycles=args.max_cycles)
+                else:
+                    cycles = runtime.loop.run(max_cycles=args.max_cycles)
             except (RuntimeConfigurationError, DeepSeekConfigurationError, MemoryConfigurationError, MemoryAccessError, UnsupportedPlatformError, WindowError, CaptureError, OSError, ValueError) as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 2

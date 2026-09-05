@@ -107,3 +107,4 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Add DeepSeek transient retry/backoff and persist usage counters.
 - [x] Add Feishu callback server/decryption, retry and usage accounting.
 - [x] Expand the daily report with local-day deltas and decision summaries.
+- [x] Add bounded exception restart/backoff supervision without bypassing safety recovery.
