@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 import base64
 import hashlib
+import io
 import struct
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -73,6 +76,37 @@ def test_deepseek_client_records_usage_without_network() -> None:
 def test_deepseek_client_rejects_negative_retry_count() -> None:
     with pytest.raises(ValueError, match="max_retries"):
         DeepSeekClient("https://example.invalid", "key", "model", max_retries=-1)
+
+
+def test_deepseek_client_retries_http_429_and_records_response_usage(monkeypatch) -> None:
+    calls = []
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return json.dumps({
+                "choices": [{"message": {"content": json.dumps({"ok": True})}}],
+                "usage": {"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6},
+            }).encode()
+
+    def fake_urlopen(request, timeout):
+        calls.append((request.full_url, timeout))
+        if len(calls) == 1:
+            raise urllib.error.HTTPError(request.full_url, 429, "rate limited", {}, io.BytesIO(b"retry"))
+        return Response()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    client = DeepSeekClient("https://example.invalid", "key", "model", max_retries=1, backoff_seconds=0, sleep_fn=lambda _: None)
+    assert client.complete_json([{"role": "user", "content": "{}"}]) == {"ok": True}
+    assert len(calls) == 2
+    assert client.usage_totals["total_tokens"] == 6
 
 
 def test_action_engine_is_dry_run_and_idempotent(store: SQLiteStore, tmp_path: Path) -> None:
