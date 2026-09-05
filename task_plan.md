@@ -132,3 +132,11 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Add a Windows floating assistant window that follows the game, toggles with global `Home`, and exposes saved DeepSeek settings.
 - [x] Update the desktop shortcut to launch the floating assistant safely.
 - [ ] Add a separately gated real Steam E2E harness; real E2E remains unverified until the game is running with calibrated UI/profile data.
+
+### Real E2E preflight remediation (2026-09-05)
+
+- [x] Remove `CAPTUREBLT` from the normal client capture raster operation and retain it only as an explicit future diagnostic constant.
+- [x] Add near-black frame diagnostics and fail-closed `CAPTURE_BLACK_FRAME` handling without fallback.
+- [x] Add non-focus-stealing foreground wait with 30-second timeout, 500ms polling, and 3-second stability.
+- [x] Add read-only `e2e-preflight --wait-for-game-foreground` and wire the same wait option into the explicitly gated E2E command.
+- [x] Add regression tests and complete local verification.

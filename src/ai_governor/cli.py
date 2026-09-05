@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 
 from .config import Settings
-from .capture import CaptureError, ClientAreaCapture, Win32ClientCaptureBackend
+from .capture import CaptureBlackFrameError, CaptureError, ClientAreaCapture, Win32ClientCaptureBackend
 from .deepseek import DeepSeekConfigurationError
-from .e2e import BuildMenuE2EHarness, E2EConfigurationError
+from .e2e import BuildMenuE2EHarness, E2EConfigurationError, E2EPreflightError, run_read_only_preflight
 from .feishu import CommandRouter
 from .feishu_http import FeishuApiClient, FeishuCallbackServer, FeishuEventHandler
 from .memory import (
@@ -56,6 +56,13 @@ def build_parser() -> argparse.ArgumentParser:
     e2e.add_argument("--confirm-live-e2e", action="store_true", help="required confirmation before real input")
     e2e.add_argument("--open-element", default="build_menu_button")
     e2e.add_argument("--close-element", default="close_build_menu")
+    e2e.add_argument("--wait-for-game-foreground", action="store_true", help="wait up to 30 seconds for Song to remain foreground for 3 seconds")
+    preflight = sub.add_parser("e2e-preflight", help="run read-only Steam capture and Vision preflight")
+    preflight.add_argument("--wait-for-game-foreground", action="store_true", help="wait up to 30 seconds for Song to remain foreground for 3 seconds")
+    preflight.add_argument("--timeout-seconds", type=float, default=30.0)
+    preflight.add_argument("--stable-seconds", type=float, default=3.0)
+    preflight.add_argument("--poll-seconds", type=float, default=0.5)
+    preflight.add_argument("--output-dir", default="data/e2e")
     sub.add_parser("memory-processes", help="list Windows processes for profile calibration")
     memory_modules = sub.add_parser("memory-modules", help="list loaded modules for one Windows process")
     memory_modules.add_argument("--process-name", required=True, help="exact process name, for example Song.exe")
@@ -118,7 +125,8 @@ def main(argv: list[str] | None = None) -> int:
         except (CaptureError, WindowError, OSError) as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 2
-        print(json.dumps({"path": str(output), "width": frame.width, "height": frame.height}, ensure_ascii=False))
+        diagnostic = frame.diagnostic.to_dict() if frame.diagnostic else None
+        print(json.dumps({"path": str(output), "width": frame.width, "height": frame.height, "diagnostic": diagnostic}, ensure_ascii=False))
         return 0
     if args.command == "memory-read":
         profile_path = Path(args.profile) if args.profile else settings.memory_profile_path
@@ -190,6 +198,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "e2e-build-menu":
             try:
+                if args.wait_for_game_foreground:
+                    run_read_only_preflight(settings, store, wait_for_game_foreground=True)
                 runtime = build_runtime(settings, store, ("resources", "events", "build_menu", "dialog"))
                 result = BuildMenuE2EHarness(
                     settings,
@@ -198,7 +208,23 @@ def main(argv: list[str] | None = None) -> int:
                     open_element=args.open_element,
                     close_element=args.close_element,
                 ).run(attempts=args.attempts, confirm_live=args.confirm_live_e2e)
-            except (E2EConfigurationError, RuntimeConfigurationError, DeepSeekConfigurationError, MemoryConfigurationError, MemoryAccessError, UnsupportedPlatformError, WindowError, CaptureError, OSError, ValueError) as exc:
+            except (E2EConfigurationError, E2EPreflightError, RuntimeConfigurationError, DeepSeekConfigurationError, MemoryConfigurationError, MemoryAccessError, UnsupportedPlatformError, WindowError, CaptureError, OSError, ValueError) as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "e2e-preflight":
+            try:
+                result = run_read_only_preflight(
+                    settings,
+                    store,
+                    wait_for_game_foreground=args.wait_for_game_foreground,
+                    timeout_seconds=args.timeout_seconds,
+                    stable_seconds=args.stable_seconds,
+                    poll_seconds=args.poll_seconds,
+                    output_dir=Path(args.output_dir),
+                )
+            except (E2EPreflightError, DeepSeekConfigurationError, WindowError, CaptureBlackFrameError, CaptureError, OSError, ValueError) as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 2
             print(json.dumps(result, ensure_ascii=False, indent=2))

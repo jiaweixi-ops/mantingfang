@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from ai_governor.actions import ActionEngine, DryRunExecutor
-from ai_governor.capture import CapturedFrame, ClientAreaCapture, encode_rgba_png
+from ai_governor.capture import CapturedFrame, ClientAreaCapture, Win32ClientCaptureBackend, encode_rgba_png, is_near_black_frame
 from ai_governor.input import DryRunInputAdapter, InputCommand, InputDisabled, WindowsSendInputAdapter
 from ai_governor.loop import CompositeObservationSource, GovernorLoop
 from ai_governor.config import Settings, load_persisted_settings, save_persisted_settings
@@ -32,7 +32,7 @@ from ai_governor.storage import SQLiteStore
 from ai_governor.state import StateAggregator
 from ai_governor.supervisor import GovernorSupervisor
 from ai_governor.watchdog import Watchdog
-from ai_governor.window import SteamWindowAdapter, WindowNotFound, WindowNotForeground
+from ai_governor.window import ForegroundTimeout, SteamWindowAdapter, WindowNotFound, WindowNotForeground
 from ai_governor.skills import InputActionExecutor, PreActionValidationError, SkillTranslationError, SkillTranslator
 from ai_governor.verification import ScreenshotVerifier, SemanticStateVerifier
 
@@ -858,6 +858,70 @@ def test_window_adapter_fails_closed_when_window_is_missing() -> None:
             return None
     with pytest.raises(WindowNotFound, match="window not found"):
         SteamWindowAdapter("missing", MissingWindow()).locate()
+
+
+def test_window_adapter_waits_for_stable_foreground_without_focusing() -> None:
+    backend = FakeWindowBackend()
+    backend.foreground = 1
+    now = 0.0
+
+    def clock() -> float:
+        return now
+
+    # The fake sleep keeps the game foreground after the first poll to model a
+    # user selecting Song; the adapter must never call a focus API.
+    calls = 0
+
+    def controlled_sleep(seconds: float) -> None:
+        nonlocal now, calls
+        now += seconds
+        calls += 1
+        if calls >= 1:
+            backend.foreground = 99
+
+    backend.foreground = 1
+    result = SteamWindowAdapter("满庭芳：宋上繁华", backend).wait_for_foreground(
+        timeout_seconds=5,
+        stable_seconds=1.5,
+        poll_seconds=0.5,
+        clock=clock,
+        sleep=controlled_sleep,
+    )
+    assert result.hwnd == 99
+    assert calls >= 3
+
+
+def test_window_adapter_foreground_wait_times_out_without_focusing() -> None:
+    backend = FakeWindowBackend()
+    now = 0.0
+
+    def clock() -> float:
+        return now
+
+    def sleep(seconds: float) -> None:
+        nonlocal now
+        now += seconds
+
+    with pytest.raises(ForegroundTimeout, match="FOREGROUND_TIMEOUT"):
+        SteamWindowAdapter("满庭芳：宋上繁华", backend).wait_for_foreground(
+            timeout_seconds=1,
+            stable_seconds=1,
+            poll_seconds=0.5,
+            clock=clock,
+            sleep=sleep,
+        )
+
+
+def test_win32_capture_defaults_to_srccopy_without_captureblt() -> None:
+    assert Win32ClientCaptureBackend.DEFAULT_RASTER_OP == Win32ClientCaptureBackend.SRCCOPY
+    assert not (Win32ClientCaptureBackend.DEFAULT_RASTER_OP & Win32ClientCaptureBackend.CAPTUREBLT)
+    assert Win32ClientCaptureBackend.DEFAULT_RASTER_MODE == "SRCCOPY"
+
+
+def test_capture_diagnostic_marks_near_black_frame_without_fallback() -> None:
+    assert is_near_black_frame(bytes((0, 0, 0, 255)) * 100)
+    rgba = bytes((0, 0, 0, 255)) * 97 + bytes((255, 255, 255, 255)) * 3
+    assert not is_near_black_frame(rgba, min_black_ratio=0.98)
 
 
 def test_rgba_png_encoder_returns_valid_png_signature() -> None:

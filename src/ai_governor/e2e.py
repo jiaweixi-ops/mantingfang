@@ -2,17 +2,139 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+import json
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from .actions import ActionEngine
+from .capture import CaptureBlackFrameError, ClientAreaCapture, Win32ClientCaptureBackend
 from .config import Settings
+from .deepseek import DeepSeekClient, DeepSeekConfigurationError
 from .models import ActionPlan, PlannedAction
+from .perception import PerceptionEngine, RegionCatalog
 from .storage import SQLiteStore
+from .window import ForegroundTimeout, SteamWindowAdapter, Win32WindowBackend, WindowError
 
 
 class E2EConfigurationError(RuntimeError):
     pass
+
+
+class E2EPreflightError(RuntimeError):
+    pass
+
+
+def _preflight_observation_summary(data: dict[str, Any]) -> dict[str, Any]:
+    """Persist only bounded, non-secret calibration facts."""
+    summary: dict[str, Any] = {}
+    for key in ("build_menu_open", "dialog_open", "current_screen", "confidence"):
+        if key in data:
+            summary[key] = data[key]
+    elements = data.get("ui_elements")
+    if isinstance(elements, list):
+        summary["ui_elements"] = [
+            {
+                "id": item.get("id"),
+                "label": item.get("label"),
+                "bbox": item.get("bbox"),
+                "global_bbox": item.get("global_bbox"),
+            }
+            for item in elements
+            if isinstance(item, dict)
+        ]
+    return summary
+
+
+def run_read_only_preflight(
+    settings: Settings,
+    store: SQLiteStore,
+    *,
+    wait_for_game_foreground: bool = False,
+    timeout_seconds: float = 30.0,
+    stable_seconds: float = 3.0,
+    poll_seconds: float = 0.5,
+    output_dir: Path = Path("data/e2e"),
+) -> dict[str, Any]:
+    """Wait for the real game window and perform capture/Vision checks only."""
+    if not settings.deepseek_api_key:
+        raise DeepSeekConfigurationError("DEEPSEEK_API_KEY is not configured")
+    if not settings.deepseek_vision_model:
+        raise DeepSeekConfigurationError("DEEPSEEK_VISION_MODEL is not configured")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    window = SteamWindowAdapter(settings.game_window_title, Win32WindowBackend())
+    try:
+        if wait_for_game_foreground:
+            info = window.wait_for_foreground(
+                timeout_seconds=timeout_seconds,
+                stable_seconds=stable_seconds,
+                poll_seconds=poll_seconds,
+            )
+        else:
+            info = window.locate()
+            window.require_foreground(info)
+    except ForegroundTimeout as exc:
+        raise E2EPreflightError("FOREGROUND_TIMEOUT") from exc
+    except WindowError as exc:
+        raise E2EPreflightError(f"FOREGROUND_ERROR: {exc}") from exc
+
+    capture = ClientAreaCapture(window, Win32ClientCaptureBackend())
+    frame = capture.capture()
+    (output_dir / "preflight.png").write_bytes(frame.png)
+    diagnostic = frame.diagnostic.to_dict() if frame.diagnostic else {
+        "hwnd": info.hwnd,
+        "client_width": info.client_width,
+        "client_height": info.client_height,
+        "capture_backend": type(capture.backend).__name__,
+        "raster_mode": "unknown",
+        "near_black_frame": False,
+        "status": "UNKNOWN",
+    }
+    if diagnostic["near_black_frame"]:
+        raise E2EPreflightError("CAPTURE_BLACK_FRAME")
+
+    client = DeepSeekClient(
+        settings.deepseek_api_base,
+        settings.deepseek_api_key,
+        settings.deepseek_vision_model,
+        usage_callback=store.record_token_usage,
+    )
+    perception = PerceptionEngine(client, RegionCatalog(), model=settings.deepseek_vision_model)
+    observations: dict[str, dict[str, Any]] = {}
+    for region_name in ("build_menu", "dialog"):
+        try:
+            observation = perception.observe_rgba(
+                frame.rgba,
+                frame.width,
+                frame.height,
+                region_name,
+                context="E2E 只读预检；不执行任何游戏操作",
+            )
+        except Exception as exc:
+            raise E2EPreflightError(f"VISION_ERROR: {type(exc).__name__}: {exc}") from exc
+        observations[region_name] = _preflight_observation_summary(observation.data)
+
+    report = {
+        "status": "PASS",
+        "wait_for_game_foreground": wait_for_game_foreground,
+        "foreground_stable_seconds": stable_seconds if wait_for_game_foreground else None,
+        "window": {
+            "hwnd": info.hwnd,
+            "title": info.title,
+            "client_width": info.client_width,
+            "client_height": info.client_height,
+            "minimized": info.minimized,
+        },
+        "capture": diagnostic,
+        "vision": observations,
+        "live_input": {
+            "arm_live_called": False,
+            "input_sent": False,
+        },
+    }
+    (output_dir / "preflight_vision.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return report
 
 
 @dataclass

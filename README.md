@@ -86,6 +86,16 @@ Governor 发给 DeepSeek Chat Completions 的用户上下文会序列化为 UTF-
 
 `capture` 读取窗口客户区并保存 PNG；窗口不存在、最小化或 GDI 捕获失败时会返回错误，不会伪造截图。实机视觉路径应将 `CapturedFrame.rgba` 传给 `PerceptionEngine.observe_rgba()`，由程序先裁剪 ROI，再调用 DeepSeek。
 
+Windows 客户区截图默认只使用 `SRCCOPY`，不会把 `CAPTUREBLT` 加入正常 Governor/E2E 路径。命令输出还包含 HWND、客户区尺寸、后端、光栅模式和近黑帧诊断；近黑帧会标记为 `CAPTURE_BLACK_FRAME`，不会自动退回到 `CAPTUREBLT`。
+
+只读真实 Steam 预检可以等待用户自行把游戏置于前台；程序不抢焦点、不发送输入：
+
+```powershell
+py -3 -m ai_governor.cli e2e-preflight --wait-for-game-foreground
+```
+
+该命令最多等待 30 秒，并要求 `Song` 连续保持前台 3 秒，随后自动保存 `data/e2e/preflight.png` 和 `data/e2e/preflight_vision.json`，检查 `build_menu` 与 `dialog` 视觉结构。真实 Live E2E 仍需显式 `arm-live` 和 `--confirm-live-e2e`。
+
 `WindowsSendInputAdapter` 默认关闭；Task 4 只提供能力和策略边界，未将 live click/keyboard 接入 Governor。校准阶段使用 `DryRunInputAdapter`，不会向系统发送输入。
 
 动作引擎可以注入 `ScreenshotVerifier`。验证要求窗口仍存在、客户区未最小化且能够重新捕获 PNG；验证异常会把动作标记为 `uncertain` 并触发恢复态。需要人工决策的重大事件会先持久化并暂停 Watchdog，再发送飞书通知。

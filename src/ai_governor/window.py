@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import ctypes
 import os
+import time
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Callable, Protocol
 
 
 class WindowError(RuntimeError):
@@ -15,6 +16,10 @@ class WindowNotFound(WindowError):
 
 
 class WindowNotForeground(WindowError):
+    pass
+
+
+class ForegroundTimeout(WindowError):
     pass
 
 
@@ -137,3 +142,38 @@ class SteamWindowAdapter:
                 f"refusing input: game window is not foreground (game={info.hwnd}, foreground={foreground})"
             )
         return info
+
+    def wait_for_foreground(
+        self,
+        *,
+        timeout_seconds: float = 30.0,
+        stable_seconds: float = 3.0,
+        poll_seconds: float = 0.5,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> WindowInfo:
+        """Wait without focusing or activating the game window."""
+        if timeout_seconds <= 0 or stable_seconds <= 0 or poll_seconds <= 0:
+            raise ValueError("foreground wait durations must be positive")
+        deadline = clock() + timeout_seconds
+        stable_since: float | None = None
+        while True:
+            now = clock()
+            if now >= deadline:
+                raise ForegroundTimeout("FOREGROUND_TIMEOUT: Song did not remain foreground within the timeout")
+            try:
+                info = self.locate()
+            except WindowError:
+                stable_since = None
+            else:
+                if self.backend.foreground_window() == info.hwnd:
+                    if stable_since is None:
+                        stable_since = now
+                    if now - stable_since >= stable_seconds:
+                        return info
+                else:
+                    stable_since = None
+            remaining = deadline - clock()
+            if remaining <= 0:
+                raise ForegroundTimeout("FOREGROUND_TIMEOUT: Song did not remain foreground within the timeout")
+            sleep(min(poll_seconds, remaining))

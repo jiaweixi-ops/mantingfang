@@ -130,7 +130,7 @@ def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str]
         usage_callback=store.record_token_usage,
     )
     window = SteamWindowAdapter(settings.game_window_title, Win32WindowBackend())
-    capture = ClientAreaCapture(window, Win32ClientCaptureBackend())
+    capture = ClientAreaCapture(window, Win32ClientCaptureBackend(), reject_near_black=True)
     perception = PerceptionEngine(client, RegionCatalog(), model=settings.deepseek_vision_model)
     vision_source = SteamVisionObservationSource(capture, perception, tuple(regions))
     sources = [vision_source]

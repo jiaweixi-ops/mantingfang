@@ -8,5 +8,6 @@ build/
 .env
 data/*.db
 data/*.db-*
+data/e2e/
 logs/
 screenshots/

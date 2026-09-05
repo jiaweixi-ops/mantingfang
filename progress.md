@@ -79,3 +79,23 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Overlay/settings task started: the existing desktop shortcut is a direct `cli run` launcher, which explains the missing `DEEPSEEK_REASONING_MODEL` error. The implementation will add a local saved-settings store, a Windows Tkinter overlay with global `Home` toggle and game-window tracking, and a shortcut update to launch it.
 - Overlay/settings task complete: added `cli overlay`, a topmost Tkinter window that follows the game client, a global Win32 `Home` hotkey, local DeepSeek settings save/apply, and guarded start/stop controls for the dry-run Governor subprocess. Updated `C:\Users\奚嘉威\Desktop\满庭芳 AI Governor.lnk` to launch the overlay. Verification: `65 passed, 1 skipped`, compileall, diff check, module import, and hidden Tkinter construction smoke passed.
 - Overlay delivery complete: committed as `92f1159` and pushed to `origin/main`; GitHub Actions run `33969654588` passed on Python 3.11 and 3.12. The repository worktree is clean and the remote branch resolves to the same commit.
+# 2026-09-05 — Real Steam E2E acceptance attempt
+
+- Confirmed the target repository is `E:\GAME\满庭芳：宋上繁华` and the worktree was clean before this acceptance attempt.
+- Confirmed `Song.exe` is running and the current client geometry is `1280x960`; saved `data/e2e/preflight-window-info.json` and `data/e2e/preflight.png`.
+- Confirmed local Feishu callback port `127.0.0.1:8787` is listening and the existing `cloudflared` process is responsive; preserved both processes.
+- Confirmed the stale autonomous `cli run` process is no longer present. No full Governor loop was started.
+- Preflight is currently blocked: the exact `Song` window is not foreground (`ChatGPT` is foreground), so live input must not be armed. The captured frame also contains a visible assistant-panel obstruction and is not a stable build-menu calibration frame.
+- No `arm-live`, `e2e-build-menu`, mouse/keyboard input, or game action was executed.
+- Re-ran the read-only checks after the user asked to continue: `Song.exe` remains responsive at `1280x960`; `127.0.0.1:8787` remains listening; the existing Cloudflare session remains alive and reconnects successfully. Foreground is still `ChatGPT`, and the captured PNG is byte-identical to the obstructed frame.
+- Saved safe failure evidence: `data/e2e/failure_before.png`, `data/e2e/failure_report.json`, and `data/e2e/e2e_summary.md`. Vision calibration was intentionally not called because the foreground and frame-stability gates failed.
+
+# 2026-09-05 — E2E preflight remediation
+
+- Changed `Win32ClientCaptureBackend` default raster operation from `SRCCOPY | CAPTUREBLT` to `SRCCOPY`; `CAPTUREBLT` remains defined only for explicit future diagnostic use.
+- Added bounded capture diagnostics: HWND, client dimensions, backend, raster mode, near-black detection, and `CAPTURE_BLACK_FRAME` status. Runtime capture rejects near-black frames without any CAPTUREBLT fallback.
+- Added `SteamWindowAdapter.wait_for_foreground()` with a 30-second default timeout, 500ms polling, and 3-second continuous foreground requirement. It never calls a focus or activation API.
+- Added read-only `e2e-preflight --wait-for-game-foreground` and the matching opt-in flag on `e2e-build-menu`; after the foreground gate passes, the preflight captures PNG and checks the `build_menu` and `dialog` Vision schemas automatically.
+- Added tests for SRCCOPY-only defaults, near-black diagnostics, stable foreground waiting, and `FOREGROUND_TIMEOUT`.
+- Verification: `69 passed, 1 skipped`; `compileall: PASS`; CLI parser smoke passed; real read-only capture reported `raster_mode=SRCCOPY`, `near_black_frame=false`; a 1-second wait smoke returned `FOREGROUND_TIMEOUT` as designed.
+- No `arm-live`, no `e2e-build-menu`, no mouse/keyboard input, and no full Governor loop were run.

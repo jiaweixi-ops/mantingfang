@@ -16,6 +16,13 @@
 
 ## Technical direction
 
+## 2026-09-05 — E2E preflight remediation findings
+
+- `CAPTUREBLT` was the direct cause of layered/overlay content being eligible for the GDI capture path. The normal backend now passes the exact `SRCCOPY` raster operation; no automatic fallback exists.
+- A near-black frame is classified locally from sampled RGBA pixels. The diagnostic is safe to print and contains no credentials. Runtime capture can fail closed with `CAPTURE_BLACK_FRAME` so a black frame cannot reach Vision or trigger guessed input.
+- Foreground waiting is implemented at the window adapter boundary with injected clock/sleep functions for deterministic tests. It only observes `GetForegroundWindow()` and never calls `SetForegroundWindow()` or input APIs.
+- The new `e2e-preflight` command is read-only and requires only the DeepSeek API key plus Vision model. It does not require live mode, arming, or the reasoning model.
+
 ## 2026-09-05 — Latest acceptance safety batch
 
 - A semantic post-action verifier alone was too late: the previous flow could emit live input and only then discover that `expected_state`/`changed_fields` was absent. The action engine now performs preflight validation before recording RUNNING or invoking the executor.
