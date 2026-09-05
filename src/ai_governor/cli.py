@@ -6,8 +6,16 @@ import json
 from pathlib import Path
 
 from .config import Settings
-from .capture import CaptureBlackFrameError, CaptureError, ClientAreaCapture, Win32ClientCaptureBackend
-from .deepseek import DeepSeekConfigurationError
+from .capture import (
+    CaptureBlackFrameError,
+    CaptureError,
+    ClientAreaCapture,
+    PrintWindowCaptureBackend,
+    WindowsGraphicsCaptureBackend,
+    Win32ClientCaptureBackend,
+    encode_rgba_png,
+)
+from .deepseek import DeepSeekConfigurationError, DeepSeekRequestError, DeepSeekClient
 from .e2e import BuildMenuE2EHarness, E2EConfigurationError, E2EPreflightError, run_read_only_preflight
 from .feishu import CommandRouter
 from .feishu_http import FeishuApiClient, FeishuCallbackServer, FeishuEventHandler
@@ -20,7 +28,7 @@ from .memory import (
     WindowsMemoryBackend,
     WindowsProcessEnumerator,
 )
-from .window import SteamWindowAdapter, Win32WindowBackend, WindowError
+from .window import SteamWindowAdapter, Win32WindowBackend, WindowError, WindowNotFound
 from .reporting import ReportService
 from .runtime import RuntimeConfigurationError, build_runtime
 from .storage import SQLiteStore
@@ -63,6 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
     preflight.add_argument("--stable-seconds", type=float, default=3.0)
     preflight.add_argument("--poll-seconds", type=float, default=0.5)
     preflight.add_argument("--output-dir", default="data/e2e")
+    preflight.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
     sub.add_parser("memory-processes", help="list Windows processes for profile calibration")
     memory_modules = sub.add_parser("memory-modules", help="list loaded modules for one Windows process")
     memory_modules.add_argument("--process-name", required=True, help="exact process name, for example Song.exe")
@@ -71,6 +80,11 @@ def build_parser() -> argparse.ArgumentParser:
     capture = sub.add_parser("capture", help="capture the configured game client area as PNG")
     capture.add_argument("--title", help="exact window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
     capture.add_argument("--out", required=True, help="PNG output path")
+    diagnostic = sub.add_parser("capture-diagnostic", help="compare GDI, PrintWindow, and WGC without input")
+    diagnostic.add_argument("--title", help="exact window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
+    diagnostic.add_argument("--output-dir", default="data/e2e")
+    probe = sub.add_parser("vision-probe", help="send a safe temporary PNG to the configured DeepSeek Vision model")
+    probe.add_argument("--out", help="optional safe probe PNG path")
     memory_read = sub.add_parser("memory-read", help="read only fields from an explicit memory profile")
     memory_read.add_argument("--profile", help="JSON memory profile; defaults to GOVERNOR_MEMORY_PROFILE")
     command = sub.add_parser("command")
@@ -118,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "capture":
         try:
             adapter = SteamWindowAdapter(args.title or settings.game_window_title, Win32WindowBackend())
-            frame = ClientAreaCapture(adapter, Win32ClientCaptureBackend()).capture()
+            frame = ClientAreaCapture(adapter, WindowsGraphicsCaptureBackend(), reject_near_black=True).capture()
             output = Path(args.out)
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_bytes(frame.png)
@@ -127,6 +141,96 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         diagnostic = frame.diagnostic.to_dict() if frame.diagnostic else None
         print(json.dumps({"path": str(output), "width": frame.width, "height": frame.height, "diagnostic": diagnostic}, ensure_ascii=False))
+        return 0
+    if args.command == "capture-diagnostic":
+        output_dir = Path(args.output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        window_backend = Win32WindowBackend()
+        requested_title = args.title or settings.game_window_title
+        adapter = SteamWindowAdapter(requested_title, window_backend)
+        try:
+            info = adapter.locate()
+        except WindowNotFound:
+            if args.title or requested_title == "Song":
+                raise
+            adapter = SteamWindowAdapter("Song", window_backend)
+            info = adapter.locate()
+        report: dict[str, object] = {
+            "game_hwnd": info.hwnd,
+            "game_pid": window_backend.window_process_id(info.hwnd),
+            "window_title": info.title,
+            "client_width": info.client_width,
+            "client_height": info.client_height,
+            "foreground": adapter.foreground_diagnostic(info).to_dict(),
+            "gdi": {},
+            "printwindow": {},
+            "wgc": {},
+        }
+
+        def run_backend(name: str, factory, filename: str) -> dict[str, object]:
+            result: dict[str, object] = {"backend": name}
+            try:
+                backend = factory()
+                result["backend"] = getattr(backend, "backend_name", type(backend).__name__)
+                frame = ClientAreaCapture(adapter, backend).capture()
+                path = output_dir / filename
+                path.write_bytes(frame.png)
+                result.update({
+                    "success": True,
+                    "near_black": bool(frame.diagnostic.near_black_frame) if frame.diagnostic else False,
+                    "dimensions": [frame.width, frame.height],
+                    "diagnostic": frame.diagnostic.to_dict() if frame.diagnostic else None,
+                    "path": str(path),
+                })
+            except Exception as exc:
+                result.update({"success": False, "error": f"{type(exc).__name__}: {exc}"})
+            return result
+
+        report["gdi"] = run_backend("gdi", Win32ClientCaptureBackend, "capture_gdi.png")
+        report["printwindow"] = run_backend("printwindow", PrintWindowCaptureBackend, "capture_printwindow.png")
+        report["wgc"] = run_backend("wgc", WindowsGraphicsCaptureBackend, "capture_wgc.png")
+        report_path = output_dir / "capture_diagnostic.json"
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report["wgc"].get("success") else 2
+    if args.command == "vision-probe":
+        if not settings.deepseek_api_key:
+            print("ERROR: DEEPSEEK_API_KEY is not configured", file=sys.stderr)
+            return 2
+        if not settings.deepseek_vision_model:
+            print("ERROR: DEEPSEEK_VISION_MODEL is not configured", file=sys.stderr)
+            return 2
+        rgba = bytes((32, 96, 160, 255)) * (32 * 32)
+        png = encode_rgba_png(32, 32, rgba)
+        if args.out:
+            probe_path = Path(args.out)
+            probe_path.parent.mkdir(parents=True, exist_ok=True)
+            probe_path.write_bytes(png)
+        client = DeepSeekClient(settings.deepseek_api_base, settings.deepseek_api_key, settings.deepseek_vision_model)
+        try:
+            response = client.analyze_image_json(
+                png,
+                '返回 JSON：{"vision_probe": true}。只输出 JSON，不要解释。',
+                model=settings.deepseek_vision_model,
+            )
+        except DeepSeekRequestError as exc:
+            print(json.dumps({
+                "status": "FAIL",
+                "api_base": settings.deepseek_api_base,
+                "model": settings.deepseek_vision_model,
+                "http_status": exc.status_code,
+                "error_type": exc.error_type,
+                "error": str(exc),
+            }, ensure_ascii=False))
+            return 2
+        print(json.dumps({
+            "status": "PASS",
+            "api_base": settings.deepseek_api_base,
+            "model": settings.deepseek_vision_model,
+            "http_status": 200,
+            "json": response,
+            "usage": client.last_usage.to_dict() if client.last_usage else None,
+        }, ensure_ascii=False))
         return 0
     if args.command == "memory-read":
         profile_path = Path(args.profile) if args.profile else settings.memory_profile_path
@@ -223,6 +327,7 @@ def main(argv: list[str] | None = None) -> int:
                     stable_seconds=args.stable_seconds,
                     poll_seconds=args.poll_seconds,
                     output_dir=Path(args.output_dir),
+                    window_title=args.title,
                 )
             except (E2EPreflightError, DeepSeekConfigurationError, WindowError, CaptureBlackFrameError, CaptureError, OSError, ValueError) as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)

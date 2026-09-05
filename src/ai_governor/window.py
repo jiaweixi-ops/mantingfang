@@ -5,6 +5,7 @@ import os
 import time
 from dataclasses import dataclass
 from typing import Callable, Protocol
+from ctypes import wintypes
 
 
 class WindowError(RuntimeError):
@@ -31,6 +32,9 @@ class WindowBackend(Protocol):
     def client_rect(self, hwnd: int) -> tuple[int, int, int, int]: ...
     def client_to_screen(self, hwnd: int, x: int, y: int) -> tuple[int, int]: ...
     def foreground_window(self) -> int | None: ...
+    def window_process_id(self, hwnd: int) -> int | None: ...
+    def window_title(self, hwnd: int) -> str: ...
+    def process_name(self, pid: int | None) -> str | None: ...
 
 
 @dataclass(frozen=True)
@@ -52,8 +56,37 @@ class WindowInfo:
         )
 
 
+@dataclass(frozen=True)
+class ForegroundDiagnostic:
+    game_hwnd: int
+    foreground_hwnd: int | None
+    foreground_title: str
+    game_pid: int | None
+    game_process_name: str | None
+    foreground_pid: int | None
+    foreground_process_name: str | None
+    foreground_matches_game_hwnd: bool
+    same_process: bool
+    flags: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "game_hwnd": self.game_hwnd,
+            "foreground_hwnd": self.foreground_hwnd,
+            "foreground_title": self.foreground_title,
+            "game_pid": self.game_pid,
+            "game_process_name": self.game_process_name,
+            "foreground_pid": self.foreground_pid,
+            "foreground_process_name": self.foreground_process_name,
+            "foreground_matches_game_hwnd": self.foreground_matches_game_hwnd,
+            "same_process": self.same_process,
+            "flags": list(self.flags),
+        }
+
+
 class Win32WindowBackend:
     SW_RESTORE = 9
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
     class _Point(ctypes.Structure):
         _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
@@ -83,6 +116,19 @@ class Win32WindowBackend:
         self.user32.ClientToScreen.restype = ctypes.c_int
         self.user32.GetForegroundWindow.argtypes = []
         self.user32.GetForegroundWindow.restype = ctypes.c_void_p
+        self.user32.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.POINTER(wintypes.DWORD)]
+        self.user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+        self.user32.GetWindowTextLengthW.argtypes = [ctypes.c_void_p]
+        self.user32.GetWindowTextLengthW.restype = ctypes.c_int
+        self.user32.GetWindowTextW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_int]
+        self.user32.GetWindowTextW.restype = ctypes.c_int
+        self.kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        self.kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        self.kernel32.OpenProcess.restype = ctypes.c_void_p
+        self.kernel32.QueryFullProcessImageNameW.argtypes = [ctypes.c_void_p, wintypes.DWORD, ctypes.c_wchar_p, ctypes.POINTER(wintypes.DWORD)]
+        self.kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
+        self.kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        self.kernel32.CloseHandle.restype = wintypes.BOOL
 
     def find_window(self, title: str) -> int | None:
         hwnd = self.user32.FindWindowW(None, title)
@@ -113,6 +159,33 @@ class Win32WindowBackend:
         hwnd = self.user32.GetForegroundWindow()
         return int(hwnd) if hwnd else None
 
+    def window_process_id(self, hwnd: int) -> int | None:
+        pid = wintypes.DWORD()
+        if not self.user32.GetWindowThreadProcessId(ctypes.c_void_p(hwnd), ctypes.byref(pid)):
+            return None
+        return int(pid.value)
+
+    def window_title(self, hwnd: int) -> str:
+        length = self.user32.GetWindowTextLengthW(ctypes.c_void_p(hwnd))
+        buffer = ctypes.create_unicode_buffer(max(256, length + 1))
+        self.user32.GetWindowTextW(ctypes.c_void_p(hwnd), buffer, len(buffer))
+        return buffer.value
+
+    def process_name(self, pid: int | None) -> str | None:
+        if not pid:
+            return None
+        handle = self.kernel32.OpenProcess(self.PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not handle:
+            return None
+        try:
+            buffer = ctypes.create_unicode_buffer(32768)
+            size = wintypes.DWORD(len(buffer))
+            if not self.kernel32.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)):
+                return None
+            return buffer.value.rsplit("\\", 1)[-1]
+        finally:
+            self.kernel32.CloseHandle(handle)
+
 
 @dataclass
 class SteamWindowAdapter:
@@ -142,6 +215,29 @@ class SteamWindowAdapter:
                 f"refusing input: game window is not foreground (game={info.hwnd}, foreground={foreground})"
             )
         return info
+
+    def foreground_diagnostic(self, info: WindowInfo | None = None) -> ForegroundDiagnostic:
+        info = info or self.locate()
+        foreground_hwnd = self.backend.foreground_window()
+        game_pid = self.backend.window_process_id(info.hwnd)
+        foreground_pid = self.backend.window_process_id(foreground_hwnd) if foreground_hwnd else None
+        matches = foreground_hwnd == info.hwnd
+        same_process = bool(game_pid and foreground_pid and game_pid == foreground_pid)
+        flags = ()
+        if same_process and not matches:
+            flags = ("FOREGROUND_SAME_GAME_PROCESS_DIFFERENT_HWND",)
+        return ForegroundDiagnostic(
+            game_hwnd=info.hwnd,
+            foreground_hwnd=foreground_hwnd,
+            foreground_title=self.backend.window_title(foreground_hwnd) if foreground_hwnd else "",
+            game_pid=game_pid,
+            game_process_name=self.backend.process_name(game_pid),
+            foreground_pid=foreground_pid,
+            foreground_process_name=self.backend.process_name(foreground_pid),
+            foreground_matches_game_hwnd=matches,
+            same_process=same_process,
+            flags=flags,
+        )
 
     def wait_for_foreground(
         self,

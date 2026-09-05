@@ -12,13 +12,23 @@ from pathlib import Path
 import pytest
 
 from ai_governor.actions import ActionEngine, DryRunExecutor
-from ai_governor.capture import CapturedFrame, ClientAreaCapture, Win32ClientCaptureBackend, encode_rgba_png, is_near_black_frame
+from ai_governor.capture import (
+    CaptureBackendUnavailable,
+    CaptureBackendFailure,
+    CapturedFrame,
+    ClientAreaCapture,
+    WindowsGraphicsCaptureBackend,
+    Win32ClientCaptureBackend,
+    crop_rgba_to_client,
+    encode_rgba_png,
+    is_near_black_frame,
+)
 from ai_governor.input import DryRunInputAdapter, InputCommand, InputDisabled, WindowsSendInputAdapter
 from ai_governor.loop import CompositeObservationSource, GovernorLoop
 from ai_governor.config import Settings, load_persisted_settings, save_persisted_settings
 from ai_governor.cli import build_parser
 from ai_governor.deepseek import DeepSeekClient, DeepSeekRequestError
-from ai_governor.e2e import BuildMenuE2EHarness, E2EConfigurationError
+from ai_governor.e2e import BuildMenuE2EHarness, E2EConfigurationError, run_read_only_preflight
 from ai_governor.events import MajorEventCoordinator, MajorEventDetector
 from ai_governor.feishu import CommandRouter, NullFeishuTransport, FeishuGateway
 from ai_governor.feishu_http import FeishuApiClient, FeishuEventHandler, FeishuHttpTransport, FeishuPayloadCipher
@@ -143,6 +153,56 @@ def test_deepseek_client_retries_http_429_and_records_response_usage(monkeypatch
     assert client.complete_json([{"role": "user", "content": "{}"}]) == {"ok": True}
     assert len(calls) == 2
     assert client.usage_totals["total_tokens"] == 6
+
+
+def test_deepseek_vision_request_contains_image_in_user_message(monkeypatch) -> None:
+    captured = {}
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return json.dumps({"choices": [{"message": {"content": '{"vision_probe": true}'}}]}).encode()
+
+    def fake_urlopen(request, timeout):
+        captured["payload"] = json.loads(request.data.decode())
+        return Response()
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    DeepSeekClient("https://example.invalid", "secret-key", "vision-model").analyze_image_json(
+        b"png-bytes", "return JSON", model="vision-model"
+    )
+    messages = captured["payload"]["messages"]
+    assert messages[0]["role"] == "system"
+    assert messages[1]["role"] == "user"
+    assert messages[1]["content"][1]["type"] == "image_url"
+    assert messages[1]["content"][1]["image_url"]["url"].startswith("data:image/png;base64,")
+
+
+def test_deepseek_http_error_masks_api_key(monkeypatch) -> None:
+    secret = "super-secret-api-key"
+
+    def fake_urlopen(request, timeout):
+        raise urllib.error.HTTPError(
+            request.full_url,
+            400,
+            "bad request",
+            {},
+            io.BytesIO(("server echoed " + secret).encode()),
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    with pytest.raises(DeepSeekRequestError) as raised:
+        DeepSeekClient("https://example.invalid", secret, "vision-model", max_retries=0).complete_json(
+            [{"role": "user", "content": "{}"}]
+        )
+    assert raised.value.status_code == 400
+    assert secret not in str(raised.value)
+    assert "[REDACTED]" in str(raised.value)
 
 
 def test_action_engine_is_dry_run_and_idempotent(store: SQLiteStore, tmp_path: Path) -> None:
@@ -691,7 +751,7 @@ def test_perception_rejects_missing_build_menu_semantic_schema() -> None:
 def test_perception_requires_dialog_semantic_schema() -> None:
     class Analyzer(FakeAnalyzer):
         def analyze_image_json(self, image, prompt, *, model=None):
-            return {"dialog_open": True, "current_screen": "dialog", "options": []}
+            return {"dialog_open": True, "current_screen": "dialog", "options": [], "ui_elements": []}
 
     observation = PerceptionEngine(Analyzer(), RegionCatalog()).observe(b"frame", "dialog")
     assert observation.data["dialog_open"] is True
@@ -837,6 +897,15 @@ class FakeWindowBackend:
     def foreground_window(self):
         return self.foreground
 
+    def window_process_id(self, hwnd: int):
+        return 39408 if hwnd == 99 else 12116
+
+    def window_title(self, hwnd: int):
+        return "Song" if hwnd == 99 else "ChatGPT"
+
+    def process_name(self, pid: int | None):
+        return {39408: "Song.exe", 12116: "ChatGPT.exe"}.get(pid)
+
 
 def test_window_adapter_returns_client_geometry_and_normalized_point() -> None:
     info = SteamWindowAdapter("满庭芳：宋上繁华", FakeWindowBackend()).locate()
@@ -912,10 +981,117 @@ def test_window_adapter_foreground_wait_times_out_without_focusing() -> None:
         )
 
 
+def test_window_diagnostic_marks_different_hwnd_same_game_process() -> None:
+    backend = FakeWindowBackend()
+    backend.foreground = 100
+    backend.window_process_id = lambda hwnd: 39408
+    backend.window_title = lambda hwnd: "Song child"
+    diagnostic = SteamWindowAdapter("满庭芳：宋上繁华", backend).foreground_diagnostic()
+    assert diagnostic.foreground_matches_game_hwnd is False
+    assert diagnostic.same_process is True
+    assert diagnostic.flags == ("FOREGROUND_SAME_GAME_PROCESS_DIFFERENT_HWND",)
+
+
+def test_read_only_preflight_does_not_require_foreground(monkeypatch, tmp_path: Path, store: SQLiteStore) -> None:
+    class VisibleCaptureBackend:
+        backend_name = "WindowsGraphicsCaptureBackend"
+        raster_mode = "WGC"
+        is_occlusion_independent = True
+        supports_directx_window_capture = True
+
+        def capture_rgba(self, hwnd: int, width: int, height: int) -> bytes:
+            return bytes((80, 90, 100, 255)) * (width * height)
+
+    class VisionClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def analyze_image_json(self, image, prompt, *, model=None):
+            if "关注区域：build_menu" in prompt:
+                return {
+                    "build_menu_open": False,
+                    "current_screen": "city",
+                    "confidence": 0.91,
+                    "ui_elements": [{"id": "build_menu_button", "label": "建筑", "bbox": [0.1, 0.1, 0.2, 0.2]}],
+                }
+            return {
+                "dialog_open": False,
+                "current_screen": "city",
+                "options": [],
+                "confidence": 0.88,
+                "ui_elements": [{"id": "close_build_menu", "label": "关闭", "bbox": [0.7, 0.7, 0.8, 0.8]}],
+            }
+
+    backend = FakeWindowBackend()
+    backend.foreground = 100
+    monkeypatch.setattr("ai_governor.e2e.Win32WindowBackend", lambda: backend)
+    monkeypatch.setattr("ai_governor.e2e.WindowsGraphicsCaptureBackend", VisibleCaptureBackend)
+    monkeypatch.setattr("ai_governor.e2e.DeepSeekClient", VisionClient)
+    settings = Settings(
+        db_path=tmp_path / "preflight.db",
+        deepseek_api_key="test-key",
+        deepseek_vision_model="test-vision",
+    )
+    report = run_read_only_preflight(settings, store, output_dir=tmp_path / "e2e")
+    assert report["foreground"]["foreground_matches_game_hwnd"] is False
+    assert report["capture"]["raster_mode"] == "WGC"
+    assert report["vision"]["build_menu"]["ui_elements"]
+    assert report["vision"]["dialog"]["ui_elements"]
+    assert report["elements"]["open"]["found"] is True
+    assert report["elements"]["close"]["found"] is True
+
+
+def test_read_only_preflight_does_not_fallback_when_wgc_is_unavailable(monkeypatch, tmp_path: Path, store: SQLiteStore) -> None:
+    backend = FakeWindowBackend()
+    monkeypatch.setattr("ai_governor.e2e.Win32WindowBackend", lambda: backend)
+
+    def unavailable():
+        raise CaptureBackendUnavailable("WGC_UNAVAILABLE: test")
+
+    monkeypatch.setattr("ai_governor.e2e.WindowsGraphicsCaptureBackend", unavailable)
+    settings = Settings(
+        db_path=tmp_path / "preflight-wgc.db",
+        deepseek_api_key="test-key",
+        deepseek_vision_model="test-vision",
+    )
+    with pytest.raises(CaptureBackendUnavailable, match="WGC_UNAVAILABLE"):
+        run_read_only_preflight(settings, store, output_dir=tmp_path / "e2e")
+
+
 def test_win32_capture_defaults_to_srccopy_without_captureblt() -> None:
     assert Win32ClientCaptureBackend.DEFAULT_RASTER_OP == Win32ClientCaptureBackend.SRCCOPY
     assert not (Win32ClientCaptureBackend.DEFAULT_RASTER_OP & Win32ClientCaptureBackend.CAPTUREBLT)
     assert Win32ClientCaptureBackend.DEFAULT_RASTER_MODE == "SRCCOPY"
+
+
+def test_capture_backend_capabilities_distinguish_gdi_and_wgc() -> None:
+    assert Win32ClientCaptureBackend.is_occlusion_independent is False
+    assert Win32ClientCaptureBackend.supports_directx_window_capture is False
+    assert WindowsGraphicsCaptureBackend.is_occlusion_independent is True
+    assert WindowsGraphicsCaptureBackend.supports_directx_window_capture is True
+
+
+def test_wgc_client_crop_removes_window_chrome_without_desktop_coordinates() -> None:
+    width, height = 1282, 992
+    source = bytearray(width * height * 4)
+    for y in range(height):
+        for x in range(width):
+            offset = (y * width + x) * 4
+            source[offset:offset + 4] = bytes((x % 256, y % 256, 7, 255))
+    cropped = crop_rgba_to_client(bytes(source), width, height, 1280, 960, 1, 31, 1282, 992)
+    assert len(cropped) == 1280 * 960 * 4
+    assert cropped[:4] == bytes((1, 31, 7, 255))
+
+
+def test_wgc_unavailable_is_explicit_and_does_not_downgrade(monkeypatch) -> None:
+    monkeypatch.setattr("ai_governor.capture.os.name", "posix")
+    with pytest.raises(CaptureBackendUnavailable, match="WGC_UNAVAILABLE"):
+        WindowsGraphicsCaptureBackend()
+
+
+def test_wgc_backend_failure_is_explicit() -> None:
+    with pytest.raises(CaptureBackendFailure, match="CAPTURE_BACKEND_FAILURE"):
+        crop_rgba_to_client(bytes(4), 1, 1, 2, 2, 0, 0, 1, 1)
 
 
 def test_capture_diagnostic_marks_near_black_frame_without_fallback() -> None:
@@ -980,6 +1156,31 @@ def test_live_input_refuses_non_foreground_window() -> None:
     )
     with pytest.raises(WindowNotForeground, match="not foreground"):
         adapter.execute(InputCommand("click", 0.5, 0.5))
+
+
+def test_live_input_accepts_exact_game_foreground_with_fake_backend() -> None:
+    calls = []
+
+    class Backend:
+        def move_absolute(self, x, y):
+            calls.append(("move", x, y))
+
+        def mouse_click(self):
+            calls.append(("click",))
+
+        def key(self, virtual_key, down):
+            calls.append(("key", virtual_key, down))
+
+    adapter = WindowsSendInputAdapter(
+        SteamWindowAdapter("满庭芳：宋上繁华", FakeWindowBackend()),
+        Backend(),
+        enabled=True,
+        allow_clicks=True,
+        allow_keyboard=True,
+    )
+    result = adapter.execute(InputCommand("click", 0.5, 0.5))
+    assert result["simulated"] is False
+    assert calls[-1] == ("click",)
 
 
 def test_screenshot_verifier_confirms_window_and_capture() -> None:

@@ -22,6 +22,17 @@
 - A near-black frame is classified locally from sampled RGBA pixels. The diagnostic is safe to print and contains no credentials. Runtime capture can fail closed with `CAPTURE_BLACK_FRAME` so a black frame cannot reach Vision or trigger guessed input.
 - Foreground waiting is implemented at the window adapter boundary with injected clock/sleep functions for deterministic tests. It only observes `GetForegroundWindow()` and never calls `SetForegroundWindow()` or input APIs.
 - The new `e2e-preflight` command is read-only and requires only the DeepSeek API key plus Vision model. It does not require live mode, arming, or the reasoning model.
+- Read-only foreground decoupling is safe only when scoped to `e2e-preflight`: the capture path can inspect a valid HWND while another app is foreground, but `WindowsSendInputAdapter` continues to compare the exact game HWND immediately before every input.
+- The installed Steam window is currently titled `Song` while the persisted default title is Chinese; the read-only command now has a narrow fallback to `Song` after the configured title is not found. This fallback does not alter the Live runtime window title.
+- A real SRCCOPY capture succeeded but still visibly included the assistant panel at the client area's upper-left. This is evidence that the current GDI window-DC capture semantics need a future PrintWindow/Windows Graphics Capture evaluation; no CAPTUREBLT fallback was added.
+
+## 2026-09-05 — WGC remediation handoff
+
+- User confirmed the apparent assistant panel is not physically present in the game; classify the current GDI result as `GDI_CAPTURE_CONTAMINATION` / capture-backend artifact, not a user overlay.
+- The installed `windows-capture==2.0.1` package successfully captured the live Song HWND `11866876` in a one-frame probe. The raw frame was `1282x992`; the Song client is `1280x960`, requiring a client-coordinate crop rather than a desktop crop.
+- Production must use WGC and fail closed if WGC is unavailable or fails. Do not silently fall back to GDI, PrintWindow, CAPTUREBLT, or desktop capture.
+- The current persisted DeepSeek Vision model is rejected by the API with HTTP 400; target model is `deepseek-v4-flash-vision-exp` at `https://api.deepseek.com`.
+- Real `capture-diagnostic` result: GDI succeeded at 1280x960 but visibly included the AI Governor panel; WGC succeeded at 1280x960 with a clean Song client; PrintWindow returned Win32 error 5. The WGC crop must use DWM extended frame bounds because `GetWindowRect` included invisible resize borders (1296x999 vs WGC 1282x992).
 
 ## 2026-09-05 — Latest acceptance safety batch
 

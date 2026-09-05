@@ -99,3 +99,21 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Added tests for SRCCOPY-only defaults, near-black diagnostics, stable foreground waiting, and `FOREGROUND_TIMEOUT`.
 - Verification: `69 passed, 1 skipped`; `compileall: PASS`; CLI parser smoke passed; real read-only capture reported `raster_mode=SRCCOPY`, `near_black_frame=false`; a 1-second wait smoke returned `FOREGROUND_TIMEOUT` as designed.
 - No `arm-live`, no `e2e-build-menu`, no mouse/keyboard input, and no full Governor loop were run.
+
+# 2026-09-05 — Read-only preflight foreground decoupling
+
+- Changed read-only `e2e-preflight` so a non-game foreground window is diagnostic-only; it no longer calls `require_foreground()` unless the optional wait mode is explicitly requested.
+- Added Windows `GetWindowThreadProcessId` diagnostics for game and foreground HWNDs, including PID, process name, title, exact-HWND match, same-process state, and `FOREGROUND_SAME_GAME_PROCESS_DIFFERENT_HWND` marker. Live SendInput still requires the exact game HWND foreground on every input.
+- Required `ui_elements` lists in the `build_menu` and `dialog` Vision schemas and added OPEN/CLOSE element summaries to `preflight_vision.json`.
+- Added a read-only fallback from the persisted Chinese title to the current Steam window title `Song`; no Live runtime title or input guard was changed.
+- Real read-only run located Song HWND `11866876`, PID `39408`, client `1280x960`; foreground was ChatGPT HWND `722980`, PID `12116`, process `ChatGPT.exe`. Capture passed with `SRCCOPY` and `near_black_frame=false`.
+- The current frame visibly retains a left-top assistant panel obstruction (approximately `x=0..318`, `y=70..350`), saved as `data/e2e/preflight_overlay_failure.png`. Vision did not run successfully because the persisted DeepSeek Vision model is rejected by the API with HTTP 400; `data/e2e/preflight_vision.json` now records the safe partial diagnostic.
+
+## 2026-09-05 — WGC remediation started
+
+- Recovered the prior plan and verified the current worktree is the uncommitted foreground-decoupling batch on top of `c39d0a7`.
+- Confirmed the real WGC package is installed in `.venv` and a live Song HWND frame probe succeeded without input or focus changes.
+- Next: implement backend/crop/diagnostic/probe, update production selection, add tests, then run only read-only verification.
+- WGC backend, DWM-aware client crop, production selection, capture-diagnostic CLI, and safe DeepSeek error metadata are implemented. Real diagnostic now passes WGC and classifies the visible GDI panel as capture contamination; PrintWindow is diagnostic-only and failed closed with Win32 error 5.
+- Final local verification before delivery: `79 passed, 1 skipped`; `compileall PASS`; `git diff --check PASS`; real `capture-diagnostic` WGC PASS at 1280x960; `vision-probe` PASS with HTTP 200 and usage; read-only WGC preflight PASS with valid build_menu/dialog schemas. Default OPEN/CLOSE IDs were not returned by Vision in this already-open-menu frame, so no coordinates or Live action were attempted.
+- Verification after the changes: `72 passed, 1 skipped`; compileall PASS; diff check PASS; `live_armed=false`; no input was sent and no Live E2E was executed.

@@ -14,7 +14,10 @@ class DeepSeekConfigurationError(RuntimeError):
 
 
 class DeepSeekRequestError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, status_code: int | None = None, error_type: str | None = None) -> None:
+        self.status_code = status_code
+        self.error_type = error_type
+        super().__init__(message)
 
 
 @dataclass(frozen=True)
@@ -101,14 +104,20 @@ class DeepSeekClient:
                 retryable = exc.code == 408 or exc.code == 429 or 500 <= exc.code <= 599
                 if not retryable or attempt >= self.max_retries:
                     detail = exc.read().decode("utf-8", errors="replace")
-                    raise DeepSeekRequestError(f"DeepSeek HTTP {exc.code}: {detail}") from exc
+                    if self.api_key:
+                        detail = detail.replace(self.api_key, "[REDACTED]")
+                    raise DeepSeekRequestError(
+                        f"DeepSeek HTTP {exc.code}: {detail}",
+                        status_code=exc.code,
+                        error_type="http_error",
+                    ) from exc
             except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
                 last_error = exc
                 if attempt >= self.max_retries:
-                    raise DeepSeekRequestError(str(exc)) from exc
+                    raise DeepSeekRequestError(str(exc), error_type=type(exc).__name__) from exc
             self.sleep_fn(self.backoff_seconds * (2 ** attempt))
         if body is None:
-            raise DeepSeekRequestError(str(last_error or "DeepSeek request failed"))
+            raise DeepSeekRequestError(str(last_error or "DeepSeek request failed"), error_type="request_failed")
         self._record_usage(body.get("usage"), chosen_model, usage_kind)
         try:
             content = body["choices"][0]["message"]["content"]
@@ -116,7 +125,7 @@ class DeepSeekClient:
                 return content
             return json.loads(content)
         except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
-            raise DeepSeekRequestError("DeepSeek returned a non-JSON response") from exc
+            raise DeepSeekRequestError("DeepSeek returned a non-JSON response", error_type="invalid_json") from exc
 
     def analyze_image_json(self, image: bytes, prompt: str, *, model: str | None = None) -> dict[str, Any]:
         encoded = base64.b64encode(image).decode("ascii")

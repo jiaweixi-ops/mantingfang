@@ -48,7 +48,7 @@ src/ai_governor/
   memory.py        Windows 只读内存采样与 profile 校验
   state.py         内存/视觉观测合并与字段来源追踪
   window.py        Steam 窗口查找、客户区和归一化坐标
-  capture.py       Windows 客户区截图与标准 PNG 编码
+  capture.py       WGC 生产截图、GDI/PrintWindow 诊断与标准 PNG 编码
   input.py         策略门控的 dry-run/SendInput 适配器
   skills.py        PlannedAction 到输入技能的受限转换器
   skills.py        PlannedAction 到输入技能的受限转换器
@@ -84,14 +84,22 @@ Governor 发给 DeepSeek Chat Completions 的用户上下文会序列化为 UTF-
 
 `window-info` 只检查窗口和客户区，不会激活、点击或输入游戏。
 
-`capture` 读取窗口客户区并保存 PNG；窗口不存在、最小化或 GDI 捕获失败时会返回错误，不会伪造截图。实机视觉路径应将 `CapturedFrame.rgba` 传给 `PerceptionEngine.observe_rgba()`，由程序先裁剪 ROI，再调用 DeepSeek。
+`capture` 使用窗口级 Windows Graphics Capture（WGC）读取 Song 客户区并保存 PNG；窗口不存在、最小化或 WGC 捕获失败时会返回错误，不会静默降级到 GDI、PrintWindow 或桌面截图。实机视觉路径应将 `CapturedFrame.rgba` 传给 `PerceptionEngine.observe_rgba()`，由程序先裁剪 ROI，再调用 DeepSeek。
 
 Windows 客户区截图默认只使用 `SRCCOPY`，不会把 `CAPTUREBLT` 加入正常 Governor/E2E 路径。命令输出还包含 HWND、客户区尺寸、后端、光栅模式和近黑帧诊断；近黑帧会标记为 `CAPTURE_BLACK_FRAME`，不会自动退回到 `CAPTUREBLT`。
+
+安装 WGC 依赖：
+
+```powershell
+py -3 -m pip install -e ".[windows-capture]"
+```
+
+`capture-diagnostic` 会在 `data/e2e/` 生成 GDI、PrintWindow、WGC 三种只读对比和 JSON 诊断；GDI/PrintWindow 仅供诊断，生产路径固定选择 WGC。`vision-probe` 使用临时安全 PNG 验证 DeepSeek Vision 的 HTTP、JSON、usage 和图片消息结构。
 
 只读真实 Steam 预检可以等待用户自行把游戏置于前台；程序不抢焦点、不发送输入：
 
 ```powershell
-py -3 -m ai_governor.cli e2e-preflight --wait-for-game-foreground
+py -3 -m ai_governor.cli e2e-preflight --title Song --wait-for-game-foreground
 ```
 
 该命令最多等待 30 秒，并要求 `Song` 连续保持前台 3 秒，随后自动保存 `data/e2e/preflight.png` 和 `data/e2e/preflight_vision.json`，检查 `build_menu` 与 `dialog` 视觉结构。真实 Live E2E 仍需显式 `arm-live` 和 `--confirm-live-e2e`。

@@ -8,13 +8,13 @@ from typing import Any
 from uuid import uuid4
 
 from .actions import ActionEngine
-from .capture import CaptureBlackFrameError, ClientAreaCapture, Win32ClientCaptureBackend
+from .capture import ClientAreaCapture, WindowsGraphicsCaptureBackend
 from .config import Settings
 from .deepseek import DeepSeekClient, DeepSeekConfigurationError
 from .models import ActionPlan, PlannedAction
 from .perception import PerceptionEngine, RegionCatalog
 from .storage import SQLiteStore
-from .window import ForegroundTimeout, SteamWindowAdapter, Win32WindowBackend, WindowError
+from .window import ForegroundTimeout, SteamWindowAdapter, Win32WindowBackend, WindowError, WindowNotFound
 
 
 class E2EConfigurationError(RuntimeError):
@@ -46,6 +46,29 @@ def _preflight_observation_summary(data: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
+def _find_preflight_element(observations: dict[str, dict[str, Any]], element_id: str) -> dict[str, Any]:
+    for region, data in observations.items():
+        elements = data.get("ui_elements", [])
+        for element in elements:
+            if isinstance(element, dict) and element.get("id") == element_id:
+                return {
+                    "found": True,
+                    "region": region,
+                    "id": element.get("id"),
+                    "label": element.get("label"),
+                    "global_bbox": element.get("global_bbox"),
+                    "confidence": data.get("confidence"),
+                }
+    return {
+        "found": False,
+        "region": None,
+        "id": element_id,
+        "label": None,
+        "global_bbox": None,
+        "confidence": None,
+    }
+
+
 def run_read_only_preflight(
     settings: Settings,
     store: SQLiteStore,
@@ -55,6 +78,7 @@ def run_read_only_preflight(
     stable_seconds: float = 3.0,
     poll_seconds: float = 0.5,
     output_dir: Path = Path("data/e2e"),
+    window_title: str | None = None,
 ) -> dict[str, Any]:
     """Wait for the real game window and perform capture/Vision checks only."""
     if not settings.deepseek_api_key:
@@ -63,7 +87,9 @@ def run_read_only_preflight(
         raise DeepSeekConfigurationError("DEEPSEEK_VISION_MODEL is not configured")
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    window = SteamWindowAdapter(settings.game_window_title, Win32WindowBackend())
+    backend = Win32WindowBackend()
+    selected_title = window_title or settings.game_window_title
+    window = SteamWindowAdapter(selected_title, backend)
     try:
         if wait_for_game_foreground:
             info = window.wait_for_foreground(
@@ -72,14 +98,26 @@ def run_read_only_preflight(
                 poll_seconds=poll_seconds,
             )
         else:
-            info = window.locate()
-            window.require_foreground(info)
+            # Read-only capture does not require the game to be foreground.
+            # Live input keeps its separate exact-HWND guard in input.py.
+            try:
+                info = window.locate()
+            except WindowNotFound:
+                # Steam currently exposes the installed game as "Song" even
+                # when the persisted user-facing title is the Chinese name.
+                if window_title or selected_title == "Song":
+                    raise
+                window = SteamWindowAdapter("Song", backend)
+                info = window.locate()
     except ForegroundTimeout as exc:
         raise E2EPreflightError("FOREGROUND_TIMEOUT") from exc
     except WindowError as exc:
         raise E2EPreflightError(f"FOREGROUND_ERROR: {exc}") from exc
 
-    capture = ClientAreaCapture(window, Win32ClientCaptureBackend())
+    foreground = window.foreground_diagnostic(info)
+    # Read-only preflight uses the same production WGC path so the Vision
+    # evidence is not contaminated by GDI layered-window behavior.
+    capture = ClientAreaCapture(window, WindowsGraphicsCaptureBackend())
     frame = capture.capture()
     (output_dir / "preflight.png").write_bytes(frame.png)
     diagnostic = frame.diagnostic.to_dict() if frame.diagnostic else {
@@ -93,6 +131,29 @@ def run_read_only_preflight(
     }
     if diagnostic["near_black_frame"]:
         raise E2EPreflightError("CAPTURE_BLACK_FRAME")
+
+    report_path = output_dir / "preflight_vision.json"
+    report: dict[str, Any] = {
+        "status": "CAPTURE_PASS",
+        "wait_for_game_foreground": wait_for_game_foreground,
+        "foreground_stable_seconds": stable_seconds if wait_for_game_foreground else None,
+        "window": {
+            "hwnd": info.hwnd,
+            "title": info.title,
+            "client_width": info.client_width,
+            "client_height": info.client_height,
+            "minimized": info.minimized,
+        },
+        "foreground": foreground.to_dict(),
+        "capture": diagnostic,
+        "vision": {},
+        "elements": {},
+        "live_input": {
+            "arm_live_called": False,
+            "input_sent": False,
+        },
+    }
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     client = DeepSeekClient(
         settings.deepseek_api_base,
@@ -112,28 +173,20 @@ def run_read_only_preflight(
                 context="E2E 只读预检；不执行任何游戏操作",
             )
         except Exception as exc:
+            report["status"] = "FAIL"
+            report["failure_class"] = "VISION_ERROR"
+            report["failure_reason"] = f"{type(exc).__name__}: {exc}"
+            report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             raise E2EPreflightError(f"VISION_ERROR: {type(exc).__name__}: {exc}") from exc
         observations[region_name] = _preflight_observation_summary(observation.data)
 
-    report = {
-        "status": "PASS",
-        "wait_for_game_foreground": wait_for_game_foreground,
-        "foreground_stable_seconds": stable_seconds if wait_for_game_foreground else None,
-        "window": {
-            "hwnd": info.hwnd,
-            "title": info.title,
-            "client_width": info.client_width,
-            "client_height": info.client_height,
-            "minimized": info.minimized,
-        },
-        "capture": diagnostic,
-        "vision": observations,
-        "live_input": {
-            "arm_live_called": False,
-            "input_sent": False,
-        },
+    report["status"] = "PASS"
+    report["vision"] = observations
+    report["elements"] = {
+        "open": _find_preflight_element(observations, "build_menu_button"),
+        "close": _find_preflight_element(observations, "close_build_menu"),
     }
-    (output_dir / "preflight_vision.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return report
 
 

@@ -109,6 +109,8 @@ class PerceptionEngine:
             current_screen = result.get("current_screen")
             if not isinstance(current_screen, str) or not current_screen.strip():
                 raise ValueError("build_menu vision schema requires non-empty current_screen")
+            if not isinstance(result.get("ui_elements"), list):
+                raise ValueError("build_menu vision schema requires ui_elements list")
         elif region.name == "dialog":
             if not isinstance(result.get("dialog_open"), bool):
                 raise ValueError("dialog vision schema requires boolean dialog_open")
@@ -117,6 +119,8 @@ class PerceptionEngine:
                 raise ValueError("dialog vision schema requires non-empty current_screen")
             if not isinstance(result.get("options"), list):
                 raise ValueError("dialog vision schema requires options list")
+            if not isinstance(result.get("ui_elements"), list):
+                raise ValueError("dialog vision schema requires ui_elements list")
 
     @staticmethod
     def _normalize_ui_elements(result: dict[str, Any], region: RegionSpec) -> dict[str, Any]:

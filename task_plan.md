@@ -140,3 +140,13 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Add non-focus-stealing foreground wait with 30-second timeout, 500ms polling, and 3-second stability.
 - [x] Add read-only `e2e-preflight --wait-for-game-foreground` and wire the same wait option into the explicitly gated E2E command.
 - [x] Add regression tests and complete local verification.
+
+## WGC capture remediation (2026-09-05)
+
+- [x] Add a real Windows Graphics Capture backend scoped to the Song HWND.
+- [x] Keep GDI and PrintWindow as explicit diagnostics only; no silent production fallback.
+- [x] Add capture-diagnostic artifacts and a safe DeepSeek Vision probe.
+- [x] Make production runtime and read-only preflight select WGC.
+- [x] Add capability, crop, failure, and safety regression tests.
+- [x] Run pytest, compileall, diff check, capture diagnostic, Vision probe, and read-only preflight.
+- [ ] Commit/push only if all required checks pass; never arm Live or run e2e-build-menu.
