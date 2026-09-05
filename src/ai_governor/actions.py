@@ -45,7 +45,11 @@ class SafetyGate:
         if action.risk == RiskLevel.CRITICAL and not self.settings.allow_critical_actions:
             return False, "critical action requires explicit enablement"
         if self.settings.execution_mode == "live":
-            return False, "live execution adapter is not enabled in this build"
+            if not self.settings.allow_live_input:
+                return False, "live input requires GOVERNOR_ALLOW_LIVE_INPUT=true"
+            if not self.store.get_runtime("live_armed", False):
+                return False, "live input requires explicit runtime arming"
+            return True, "allowed by explicit live-input policy"
         return True, "allowed in dry-run"
 
 
@@ -69,6 +73,10 @@ class ActionEngine:
                 results.append({"id": action.id, "status": "skipped_duplicate", "previous": previous["status"]})
                 continue
             allowed, reason = self.gate.check(effective_action)
+            if allowed and self.settings.execution_mode == "live":
+                if self.verifier is None or not getattr(self.verifier, "semantic", False):
+                    allowed = False
+                    reason = "live execution requires semantic post-action verification"
             if not allowed:
                 self.store.record_action(effective_action, ActionStatus.BLOCKED, {"reason": reason}, idempotency_key=scoped_key)
                 results.append({"id": action.id, "status": ActionStatus.BLOCKED.value, "reason": reason})
@@ -89,6 +97,12 @@ class ActionEngine:
                     self.store.set_runtime("recovery_required", True)
                     results.append({"id": action.id, "status": ActionStatus.UNCERTAIN.value, "error": str(exc)})
                     continue
-            self.store.record_action(effective_action, ActionStatus.SIMULATED, result, idempotency_key=scoped_key)
-            results.append({"id": action.id, "status": ActionStatus.SIMULATED.value, "result": result})
+            if result.get("verification", {}).get("verified") is False:
+                self.store.record_action(effective_action, ActionStatus.UNCERTAIN, result, idempotency_key=scoped_key)
+                self.store.set_runtime("recovery_required", True)
+                results.append({"id": action.id, "status": ActionStatus.UNCERTAIN.value, "result": result})
+                continue
+            final_status = ActionStatus.SIMULATED if result.get("simulated", True) else ActionStatus.SUCCEEDED
+            self.store.record_action(effective_action, final_status, result, idempotency_key=scoped_key)
+            results.append({"id": action.id, "status": final_status.value, "result": result})
         return results

@@ -24,7 +24,7 @@ py -3.11 -m venv .venv
 - 数字状态可以通过 `memory-read` 接入显式的 Windows 只读内存 profile；地址必须由用户针对具体游戏版本校准，程序不猜地址、不做大范围扫描、不写进程内存。
 - 日报通过 `获取日报` 等命令按需生成；重大事件通过 Feishu gateway 主动发送。
 - 动作具有风险等级、幂等键、审计记录、暂停/恢复和恢复确认门槛。
-- `GOVERNOR_EXECUTION_MODE=live` 当前仍会被明确阻断；只有完成真实窗口适配与执行后验证后才能开放。
+- `GOVERNOR_EXECUTION_MODE=live` 仍需要 `GOVERNOR_ALLOW_LIVE_INPUT=true`、运行时 `live_armed=true` 和语义验证器三重条件；默认 dry-run，不会自动开启真实输入。
 
 ## 目录
 
@@ -41,6 +41,7 @@ src/ai_governor/
   window.py        Steam 窗口查找、客户区和归一化坐标
   capture.py       Windows 客户区截图与标准 PNG 编码
   input.py         策略门控的 dry-run/SendInput 适配器
+  skills.py        PlannedAction 到输入技能的受限转换器
   verification.py  动作后的窗口/截图验证
   loop.py           变化检测、心跳和恢复态长运行循环
   models.py        状态、目标、动作、事件模型
@@ -82,5 +83,7 @@ Governor 发给 DeepSeek Chat Completions 的用户上下文会序列化为 UTF-
 动作幂等默认按 `plan_id + action_type + payload` 作用域计算，因此周期性资源检查可以在新计划中再次执行；只有显式提供 `idempotency_key` 的不可重复动作才跨计划永久去重。
 
 `GovernorLoop` 每轮读取观测，按稳定数据指纹跳过无变化画面，调用 Governor 处理变化，并在观测源连续失败达到阈值时暂停并进入恢复态。它是编排组件，不会自行启动游戏或启用 live 输入。
+
+`CompositeObservationSource` 可以在同一轮合并内存和多区域视觉观测；`InputActionExecutor` 只接受白名单输入技能，并可在动作前后采集状态交给 `SemanticStateVerifier`。截图可用性验证不再被视为 live 动作成功的充分条件。
 
 飞书正式接入使用 `FeishuApiClient` + `FeishuHttpTransport`：凭据来自环境变量，token 只缓存在进程内，事件处理支持 URL challenge、文本命令和可选签名校验。测试默认使用 fake HTTP，不会发送真实消息。

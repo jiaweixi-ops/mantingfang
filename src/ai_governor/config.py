@@ -18,6 +18,7 @@ class Settings:
     memory_profile_path: Path | None = None
     execution_mode: str = "dry-run"
     allow_critical_actions: bool = False
+    allow_live_input: bool = False
     game_window_title: str = "满庭芳：宋上繁华"
     deepseek_api_base: str = "https://api.deepseek.com"
     deepseek_api_key: str | None = None
@@ -40,6 +41,7 @@ class Settings:
             memory_profile_path=Path(os.environ["GOVERNOR_MEMORY_PROFILE"]) if os.getenv("GOVERNOR_MEMORY_PROFILE") else None,
             execution_mode=mode,
             allow_critical_actions=_bool_env("GOVERNOR_ALLOW_CRITICAL_ACTIONS"),
+            allow_live_input=_bool_env("GOVERNOR_ALLOW_LIVE_INPUT"),
             game_window_title=os.getenv("GOVERNOR_GAME_WINDOW_TITLE", cls.game_window_title),
             deepseek_api_base=os.getenv("DEEPSEEK_API_BASE", cls.deepseek_api_base).rstrip("/"),
             deepseek_api_key=os.getenv("DEEPSEEK_API_KEY") or None,

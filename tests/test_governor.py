@@ -9,7 +9,7 @@ import pytest
 from ai_governor.actions import ActionEngine, DryRunExecutor
 from ai_governor.capture import ClientAreaCapture, encode_rgba_png
 from ai_governor.input import DryRunInputAdapter, InputCommand, InputDisabled, WindowsSendInputAdapter
-from ai_governor.loop import GovernorLoop
+from ai_governor.loop import CompositeObservationSource, GovernorLoop
 from ai_governor.config import Settings
 from ai_governor.feishu import CommandRouter, NullFeishuTransport, FeishuGateway
 from ai_governor.feishu_http import FeishuApiClient, FeishuEventHandler, FeishuHttpTransport
@@ -22,7 +22,8 @@ from ai_governor.storage import SQLiteStore
 from ai_governor.state import StateAggregator
 from ai_governor.watchdog import Watchdog
 from ai_governor.window import SteamWindowAdapter, WindowNotFound
-from ai_governor.verification import ScreenshotVerifier
+from ai_governor.skills import InputActionExecutor, SkillTranslationError, SkillTranslator
+from ai_governor.verification import ScreenshotVerifier, SemanticStateVerifier
 
 
 @pytest.fixture
@@ -63,6 +64,53 @@ def test_default_action_idempotency_is_scoped_to_plan(store: SQLiteStore, tmp_pa
     assert engine.execute_plan(second_plan)[0]["status"] == "simulated"
 
 
+def test_skill_translator_accepts_explicit_input_commands() -> None:
+    action = PlannedAction("click", {"x_ratio": 0.5, "y_ratio": 0.8})
+    commands = SkillTranslator().translate(action)
+    assert commands == [InputCommand("click", 0.5, 0.8)]
+
+
+def test_skill_translator_rejects_unknown_game_skill() -> None:
+    with pytest.raises(SkillTranslationError, match="unsupported game skill"):
+        SkillTranslator().translate(PlannedAction("build_farm", {"x": 1, "y": 2}))
+
+
+def test_input_action_executor_captures_before_and_after_state() -> None:
+    class Adapter:
+        def execute(self, command):
+            return {"kind": command.kind, "simulated": True}
+
+    states = iter([{"menu": "closed"}, {"menu": "open"}])
+    result = InputActionExecutor(Adapter(), observe_state=lambda: next(states)).execute(
+        PlannedAction("click", {"x_ratio": 0.5, "y_ratio": 0.5})
+    )
+    assert result["simulated"] is True
+    assert result["before_state"] == {"menu": "closed"}
+    assert result["after_state"] == {"menu": "open"}
+
+
+def test_semantic_verifier_requires_observable_state_change() -> None:
+    verifier = SemanticStateVerifier(lambda: {"menu": "open"}, timeout_seconds=0)
+    result = verifier.verify(
+        PlannedAction("open_menu", {"changed_fields": ["menu"]}),
+        {"before_state": {"menu": "closed"}},
+    )
+    assert result["verified"] is True
+
+
+def test_live_action_requires_explicit_policy_and_semantic_verifier(store: SQLiteStore, tmp_path: Path) -> None:
+    settings = Settings(db_path=tmp_path / "governor.db", execution_mode="live", allow_live_input=True)
+    engine = ActionEngine(settings, store, DryRunExecutor())
+    action = PlannedAction("click", {"x_ratio": 0.5, "y_ratio": 0.5})
+    result = engine.execute_plan(ActionPlan("live guard", [action]))
+    assert result[0]["status"] == "blocked"
+    assert "arming" in result[0]["reason"]
+    store.set_runtime("live_armed", True)
+    second = engine.execute_plan(ActionPlan("live semantic guard", [action]))
+    assert second[0]["status"] == "blocked"
+    assert "semantic" in second[0]["reason"]
+
+
 class SequenceSource:
     def __init__(self, observations=None, error: Exception | None = None) -> None:
         self.observations = list(observations or [])
@@ -89,6 +137,29 @@ def test_governor_loop_skips_unchanged_observations(store: SQLiteStore) -> None:
     cycles = GovernorLoop(source, runner, store, Watchdog(store), interval_seconds=0).run(max_cycles=3)
     assert [cycle.status for cycle in cycles] == ["changed", "unchanged", "changed"]
     assert [item.data["population"] for item in runner.observations] == [1, 2]
+
+
+def test_governor_loop_passes_multi_source_observations(store: SQLiteStore) -> None:
+    class MultiRunner:
+        def __init__(self):
+            self.observations = []
+
+        def run_observations(self, observations):
+            self.observations.append(observations)
+            return {"status": "executed"}
+
+    class Source:
+        def __init__(self, value):
+            self.value = value
+
+        def observe(self):
+            return Observation({"value": self.value}, source=str(self.value))
+
+    runner = MultiRunner()
+    source = CompositeObservationSource((Source("memory"), Source("vision")))
+    cycles = GovernorLoop(source, runner, store, Watchdog(store), interval_seconds=0).run(max_cycles=1)
+    assert cycles[0].status == "changed"
+    assert [item.source for item in runner.observations[0]] == ["memory", "vision"]
 
 
 def test_governor_loop_enters_recovery_after_repeated_sensor_errors(store: SQLiteStore) -> None:
