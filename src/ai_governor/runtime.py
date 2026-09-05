@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -37,9 +36,17 @@ class SteamVisionObservationSource:
     perception: PerceptionEngine
     regions: tuple[str, ...] = ("resources", "map", "events")
     force_refresh_seconds: float = 60.0
+    change_thresholds: dict[str, float] = field(default_factory=lambda: {
+        "resources": 0.005,
+        "events": 0.005,
+        "dialog": 0.005,
+        "build_menu": 0.01,
+        "map": 0.03,
+    })
     clock: Callable[[], float] = time.monotonic
-    _cache: dict[str, tuple[str, float, object]] = field(default_factory=dict, init=False, repr=False)
+    _cache: dict[str, tuple[bytes, float, object]] = field(default_factory=dict, init=False, repr=False)
     last_changed_regions: tuple[str, ...] = field(default_factory=tuple, init=False)
+    last_change_scores: dict[str, float] = field(default_factory=dict, init=False)
     last_frame: CapturedFrame | None = field(default=None, init=False, repr=False)
 
     def observe(self):
@@ -48,12 +55,16 @@ class SteamVisionObservationSource:
         now = self.clock()
         observations = []
         changed: list[str] = []
+        scores: dict[str, float] = {}
         for region_name in self.regions:
-            digest = self._region_digest(frame.rgba, frame.width, frame.height, region_name)
+            signature = self._region_signature(frame.rgba, frame.width, frame.height, region_name)
             cached = self._cache.get(region_name)
             if cached is not None:
-                cached_digest, analyzed_at, observation = cached
-                if digest == cached_digest and now - analyzed_at < self.force_refresh_seconds:
+                cached_signature, analyzed_at, observation = cached
+                score = self._change_score(cached_signature, signature)
+                scores[region_name] = score
+                threshold = self.change_thresholds.get(region_name, 0.01)
+                if score <= threshold and now - analyzed_at < self.force_refresh_seconds:
                     observations.append(observation)
                     continue
             observation = self.perception.observe_rgba(
@@ -63,20 +74,31 @@ class SteamVisionObservationSource:
                 region_name,
                 context="Governor 运行时状态采集",
             )
-            self._cache[region_name] = (digest, now, observation)
+            self._cache[region_name] = (signature, now, observation)
             observations.append(observation)
             changed.append(region_name)
         self.last_changed_regions = tuple(changed)
+        self.last_change_scores = scores
         return observations
 
-    def _region_digest(self, rgba: bytes, width: int, height: int, region_name: str) -> str:
+    def _region_signature(self, rgba: bytes, width: int, height: int, region_name: str, size: int = 64) -> bytes:
         left, top, right, bottom = self.perception.regions.get(region_name).crop_box(width, height)
-        digest = hashlib.sha256()
-        for row in range(top, bottom):
-            start = (row * width + left) * 4
-            end = (row * width + right) * 4
-            digest.update(rgba[start:end])
-        return digest.hexdigest()
+        crop_width, crop_height = right - left, bottom - top
+        signature = bytearray()
+        for output_y in range(size):
+            source_y = min(bottom - 1, top + int((output_y + 0.5) * crop_height / size))
+            for output_x in range(size):
+                source_x = min(right - 1, left + int((output_x + 0.5) * crop_width / size))
+                offset = (source_y * width + source_x) * 4
+                red, green, blue = rgba[offset:offset + 3]
+                signature.append((299 * red + 587 * green + 114 * blue) // 1000)
+        return bytes(signature)
+
+    @staticmethod
+    def _change_score(previous: bytes, current: bytes) -> float:
+        if len(previous) != len(current) or not current:
+            return 1.0
+        return sum(abs(left - right) for left, right in zip(previous, current)) / (255 * len(current))
 
 
 @dataclass

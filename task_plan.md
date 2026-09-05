@@ -122,6 +122,7 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Align Governor prompt and SkillTranslator contract; add `SELECT_EVENT_OPTION`.
 - [x] Add structured major-event detection and connect it to the runtime loop.
 - [x] Save the latest client frame for detected events and notify Feishu when configured.
+- [x] Replace exact ROI hashing with downsampled grayscale change scores and per-region thresholds.
 - [x] Add Feishu screenshot upload and explicit remote decision reply handling.
 - [x] Add CI for the source-level safety and integration checks.
 - [ ] Add a separately gated real Steam E2E harness; real E2E remains unverified until the game is running with calibrated UI/profile data.

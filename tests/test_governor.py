@@ -633,7 +633,10 @@ def test_steam_vision_source_reuses_unchanged_roi_analysis() -> None:
     assert source.last_changed_regions == ()
 
     changed = bytearray(source.capture.rgba)
-    changed[0:4] = bytes((9, 9, 9, 255))
+    for row in range(0, 16):
+        for column in range(0, 30):
+            offset = (row * 100 + column) * 4
+            changed[offset:offset + 4] = bytes((255, 255, 255, 255))
     source.capture.rgba = bytes(changed)
     third = source.observe()
     assert perception.calls == ["resources", "map", "resources"]
