@@ -40,6 +40,7 @@ src/ai_governor/
   capture.py       Windows 客户区截图与标准 PNG 编码
   input.py         策略门控的 dry-run/SendInput 适配器
   verification.py  动作后的窗口/截图验证
+  loop.py           变化检测、心跳和恢复态长运行循环
   models.py        状态、目标、动作、事件模型
   perception.py    区域化视觉接口
   reporting.py     状态/日报
@@ -70,3 +71,5 @@ py -3 -m ai_governor.cli capture --out screenshots/current.png
 动作引擎可以注入 `ScreenshotVerifier`。验证要求窗口仍存在、客户区未最小化且能够重新捕获 PNG；验证异常会把动作标记为 `uncertain` 并触发恢复态。需要人工决策的重大事件会先持久化并暂停 Watchdog，再发送飞书通知。
 
 动作幂等默认按 `plan_id + action_type + payload` 作用域计算，因此周期性资源检查可以在新计划中再次执行；只有显式提供 `idempotency_key` 的不可重复动作才跨计划永久去重。
+
+`GovernorLoop` 每轮读取观测，按稳定数据指纹跳过无变化画面，调用 Governor 处理变化，并在观测源连续失败达到阈值时暂停并进入恢复态。它是编排组件，不会自行启动游戏或启用 live 输入。

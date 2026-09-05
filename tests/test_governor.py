@@ -9,6 +9,7 @@ import pytest
 from ai_governor.actions import ActionEngine, DryRunExecutor
 from ai_governor.capture import ClientAreaCapture, encode_rgba_png
 from ai_governor.input import DryRunInputAdapter, InputCommand, InputDisabled, WindowsSendInputAdapter
+from ai_governor.loop import GovernorLoop
 from ai_governor.config import Settings
 from ai_governor.feishu import CommandRouter, NullFeishuTransport, FeishuGateway
 from ai_governor.governor import Governor
@@ -58,6 +59,41 @@ def test_default_action_idempotency_is_scoped_to_plan(store: SQLiteStore, tmp_pa
     assert engine.execute_plan(first_plan)[0]["status"] == "simulated"
     assert engine.execute_plan(first_plan)[0]["status"] == "skipped_duplicate"
     assert engine.execute_plan(second_plan)[0]["status"] == "simulated"
+
+
+class SequenceSource:
+    def __init__(self, observations=None, error: Exception | None = None) -> None:
+        self.observations = list(observations or [])
+        self.error = error
+
+    def observe(self):
+        if self.error is not None:
+            raise self.error
+        return self.observations.pop(0) if self.observations else Observation({"population": 1})
+
+
+class RecordingRunner:
+    def __init__(self) -> None:
+        self.observations = []
+
+    def run_cycle(self, observation):
+        self.observations.append(observation)
+        return {"status": "executed"}
+
+
+def test_governor_loop_skips_unchanged_observations(store: SQLiteStore) -> None:
+    runner = RecordingRunner()
+    source = SequenceSource([Observation({"population": 1}), Observation({"population": 1}), Observation({"population": 2})])
+    cycles = GovernorLoop(source, runner, store, Watchdog(store), interval_seconds=0).run(max_cycles=3)
+    assert [cycle.status for cycle in cycles] == ["changed", "unchanged", "changed"]
+    assert [item.data["population"] for item in runner.observations] == [1, 2]
+
+
+def test_governor_loop_enters_recovery_after_repeated_sensor_errors(store: SQLiteStore) -> None:
+    loop = GovernorLoop(SequenceSource(error=RuntimeError("capture unavailable")), RecordingRunner(), store, Watchdog(store), interval_seconds=0, max_observation_errors=2)
+    cycles = loop.run(max_cycles=5)
+    assert [cycle.status for cycle in cycles] == ["observation_error", "needs_recovery"]
+    assert store.get_runtime("recovery_required") is True
 
 
 def test_safety_gate_blocks_critical_and_pause(store: SQLiteStore, tmp_path: Path) -> None:

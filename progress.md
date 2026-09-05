@@ -46,4 +46,6 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - V0.2 Task 6 implementation in progress: major-event notifications now persist the event and pause the Watchdog before sending when `requires_decision` is true.
 - V0.2 Task 6 complete: decision events now persist and pause before notification. Tests: 24 passed; compileall passed. Task 7 is next: scoped action idempotency.
 - V0.2 Task 7 implementation in progress: default action de-duplication is being scoped to `plan_id`; explicit keys remain permanent.
+- V0.2 Task 8 implementation in progress: adding a stoppable GovernorLoop with stable observation fingerprints, heartbeat, and repeated sensor-error recovery.
+- V0.2 Task 8 complete: added stoppable GovernorLoop with change detection, heartbeat, and repeated sensor-error recovery. Tests: 27 passed; compileall passed. Task 9 is next: real Feishu custom-app transport boundary.
 - V0.2 Task 7 complete: default action keys are scoped to `plan_id`, while explicit keys remain permanent. Tests: 25 passed; compileall passed. Task 8 is next: long-running loop with change detection and recovery.
