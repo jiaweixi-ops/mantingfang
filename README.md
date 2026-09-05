@@ -37,6 +37,7 @@ src/ai_governor/
   feishu.py        双向命令/主动通知边界
   feishu_http.py   飞书自建应用 token、消息和事件 payload Transport
   memory.py        Windows 只读内存采样与 profile 校验
+  state.py         内存/视觉观测合并与字段来源追踪
   window.py        Steam 窗口查找、客户区和归一化坐标
   capture.py       Windows 客户区截图与标准 PNG 编码
   input.py         策略门控的 dry-run/SendInput 适配器
@@ -65,6 +66,8 @@ py -3 -m ai_governor.cli capture --out screenshots/current.png
 示例 profile 只用于验证配置格式，不能读取真实游戏；`memory-read` 只在你提供了真实、经过校准的 profile 后才有意义。当前仓库不包含猜测性的游戏地址。
 
 `memory-modules` 只用于列出目标进程的已加载模块，帮助建立版本校准证据。Windows 可能因进程完整性级别或权限返回访问拒绝；此时工具会失败并报告错误，不会降级为任意内存扫描。
+
+`StateAggregator` 将 `readonly-memory` 作为数字字段的高优先级来源，将 DeepSeek 区域视觉作为补充来源；同一字段不一致时保留内存优先结果，同时在 `conflicts` 中记录两份证据，供策略层决定是否暂停。
 
 `window-info` 只检查窗口和客户区，不会激活、点击或输入游戏。
 

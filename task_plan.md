@@ -90,7 +90,7 @@ Execute and push each item as its own verified task:
     - [x] Identify the installed Steam AppID, executable, process name, and window title.
     - [x] Add a read-only loaded-module diagnostic command; do not scan arbitrary memory.
     - [ ] Obtain and validate real population/money/food/wood/stone/time field addresses.
-11. [ ] Aggregate memory and vision observations into a canonical GameState.
+11. [x] Aggregate memory and vision observations into a canonical GameState.
 12. [ ] Add stronger strategy/reporting/watchdog features after integration is observable.
 
 ### Current V0.2 task

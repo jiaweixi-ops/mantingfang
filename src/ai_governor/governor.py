@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from .actions import ActionEngine
 from .models import ActionPlan, Observation
 from .storage import SQLiteStore
+from .state import CanonicalGameState, StateAggregator
 from .watchdog import Watchdog
 
 
@@ -27,14 +28,22 @@ class Governor:
     actions: ActionEngine
     watchdog: Watchdog
     model: str | None = None
+    state_aggregator: StateAggregator = field(default_factory=StateAggregator)
 
     def run_cycle(self, observation: Observation) -> dict[str, Any]:
-        self.store.add_observation(observation)
+        return self.run_observations([observation])
+
+    def run_observations(self, observations: list[Observation]) -> dict[str, Any]:
+        if not observations:
+            raise ValueError("at least one observation is required")
+        for observation in observations:
+            self.store.add_observation(observation)
+        state = self.state_aggregator.aggregate(observations)
         self.watchdog.heartbeat()
         if self.store.get_runtime("paused", False) or self.store.get_runtime("recovery_required", False):
             return {"status": "blocked", "reason": "paused or recovery required"}
         try:
-            response = self.brain.complete_json(self._messages(observation), model=self.model)
+            response = self.brain.complete_json(self._messages(state), model=self.model)
             plan = ActionPlan.from_dict(response)
         except Exception as exc:  # noqa: BLE001 — invalid AI output must halt safely
             self.watchdog.require_recovery(f"invalid strategy response: {exc}")
@@ -42,7 +51,7 @@ class Governor:
         results = self.actions.execute_plan(plan)
         return {"status": "executed", "plan": plan.to_dict(), "results": results}
 
-    def _messages(self, observation: Observation) -> list[dict[str, Any]]:
+    def _messages(self, state: CanonicalGameState) -> list[dict[str, Any]]:
         goals = self.store.active_goals()
         return [
             {
@@ -56,7 +65,7 @@ class Governor:
             {
                 "role": "user",
                 "content": {
-                    "observation": observation.to_dict(),
+                    "canonical_game_state": state.to_dict(),
                     "active_goals": goals,
                     "required_schema": {
                         "reason": "string",

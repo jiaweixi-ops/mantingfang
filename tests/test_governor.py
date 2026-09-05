@@ -19,6 +19,7 @@ from ai_governor.memory import MemoryAccessError, MemoryProfile, MemorySampler
 from ai_governor.perception import PerceptionEngine, RegionCatalog
 from ai_governor.reporting import ReportService
 from ai_governor.storage import SQLiteStore
+from ai_governor.state import StateAggregator
 from ai_governor.watchdog import Watchdog
 from ai_governor.window import SteamWindowAdapter, WindowNotFound
 from ai_governor.verification import ScreenshotVerifier
@@ -185,6 +186,25 @@ class FakeBrain:
         return self.response
 
 
+def test_governor_sends_canonical_state_to_brain(store: SQLiteStore, tmp_path: Path) -> None:
+    class CapturingBrain(FakeBrain):
+        def complete_json(self, messages, *, model=None, temperature=0):
+            self.messages = messages
+            return super().complete_json(messages, model=model, temperature=temperature)
+
+    settings = Settings(db_path=tmp_path / "governor.db")
+    brain = CapturingBrain({"reason": "inspect", "actions": []})
+    engine = ActionEngine(settings, store, DryRunExecutor())
+    result = Governor(store, brain, engine, Watchdog(store)).run_observations([
+        Observation({"population": 8}, source="deepseek-vision", region="resources"),
+        Observation({"values": {"population": 9, "food": 100}}, source="readonly-memory", region="memory"),
+    ])
+    assert result["status"] == "executed"
+    state = brain.messages[1]["content"]["canonical_game_state"]
+    assert state["values"] == {"population": 9, "food": 100}
+    assert state["provenance"]["population"]["source"] == "readonly-memory"
+
+
 def test_governor_runs_persisted_safe_cycle(store: SQLiteStore, tmp_path: Path) -> None:
     settings = Settings(db_path=tmp_path / "governor.db")
     response = {"reason": "inspect", "actions": [{"action_type": "inspect_region", "payload": {"region": "resources"}}]}
@@ -192,6 +212,26 @@ def test_governor_runs_persisted_safe_cycle(store: SQLiteStore, tmp_path: Path) 
     result = Governor(store, FakeBrain(response), engine, Watchdog(store)).run_cycle(Observation({"population": 8}))
     assert result["status"] == "executed"
     assert result["results"][0]["status"] == "simulated"
+
+
+def test_canonical_state_prefers_memory_and_records_conflict() -> None:
+    state = StateAggregator().aggregate([
+        Observation({"population": 100, "money": 50}, source="deepseek-vision", region="resources", observed_at="2026-09-05T10:00:00+00:00"),
+        Observation({"values": {"population": 120, "food": 300}}, source="readonly-memory", region="memory", observed_at="2026-09-05T10:00:01+00:00"),
+    ])
+    assert state.values == {"population": 120, "money": 50, "food": 300}
+    assert state.provenance["population"].source == "readonly-memory"
+    assert state.conflicts[0]["field"] == "population"
+
+
+def test_canonical_state_normalizes_chinese_fields_and_keeps_map_data() -> None:
+    state = StateAggregator().aggregate([
+        Observation({"人口": 8, "粮食": 40}, source="deepseek-vision", region="resources"),
+        Observation({"buildings": [{"type": "farm", "x": 3, "y": 4}]}, source="deepseek-vision", region="map"),
+    ])
+    assert state.values["population"] == 8
+    assert state.values["food"] == 40
+    assert state.values["buildings"][0]["type"] == "farm"
 
 
 def test_governor_halts_on_invalid_brain_response(store: SQLiteStore, tmp_path: Path) -> None:
