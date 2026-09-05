@@ -111,6 +111,13 @@ class ProcessInfo:
     name: str
 
 
+@dataclass(frozen=True)
+class ModuleInfo:
+    name: str
+    base_address: int
+    size: int
+
+
 class ProcessEnumerator(Protocol):
     def find(self, process_name: str) -> ProcessInfo | None: ...
 
@@ -207,6 +214,24 @@ class WindowsMemoryBackend:
                 if not self.kernel32.Module32NextW(snapshot, ctypes.byref(entry)):
                     break
             raise MemoryAccessError(f"module not found: {module_name}")
+        finally:
+            self.kernel32.CloseHandle(snapshot)
+
+    def list_modules(self, pid: int) -> list[ModuleInfo]:
+        snapshot = self.kernel32.CreateToolhelp32Snapshot(self.TH32CS_SNAPMODULE | self.TH32CS_SNAPMODULE32, pid)
+        if snapshot == self.INVALID_HANDLE_VALUE or not snapshot:
+            raise MemoryAccessError(f"module snapshot failed for pid {pid}: {ctypes.get_last_error()}")
+        modules: list[ModuleInfo] = []
+        try:
+            entry = self._ModuleEntry32W()
+            entry.dwSize = ctypes.sizeof(entry)
+            if not self.kernel32.Module32FirstW(snapshot, ctypes.byref(entry)):
+                raise MemoryAccessError(f"module enumeration failed for pid {pid}: {ctypes.get_last_error()}")
+            while True:
+                modules.append(ModuleInfo(entry.szModule, int(entry.modBaseAddr), int(entry.modBaseSize)))
+                if not self.kernel32.Module32NextW(snapshot, ctypes.byref(entry)):
+                    break
+            return modules
         finally:
             self.kernel32.CloseHandle(snapshot)
 

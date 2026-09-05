@@ -34,6 +34,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("pause")
     sub.add_parser("resume")
     sub.add_parser("memory-processes", help="list Windows processes for profile calibration")
+    memory_modules = sub.add_parser("memory-modules", help="list loaded modules for one Windows process")
+    memory_modules.add_argument("--process-name", required=True, help="exact process name, for example Song.exe")
     window_info = sub.add_parser("window-info", help="inspect the configured Steam game window")
     window_info.add_argument("--title", help="exact window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
     capture = sub.add_parser("capture", help="capture the configured game client area as PNG")
@@ -60,6 +62,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 2
         print(json.dumps([item.__dict__ for item in processes], ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "memory-modules":
+        try:
+            process = WindowsProcessEnumerator().find(args.process_name)
+            if process is None:
+                raise MemoryAccessError(f"process not found: {args.process_name}")
+            modules = WindowsMemoryBackend().list_modules(process.pid)
+        except (MemoryAccessError, UnsupportedPlatformError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps([module.__dict__ for module in modules], ensure_ascii=False, indent=2))
         return 0
     if args.command == "window-info":
         try:

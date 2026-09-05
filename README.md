@@ -56,12 +56,15 @@ profiles/          用户维护的只读内存 profile 说明
 ```powershell
 $env:PYTHONPATH = "src"
 py -3 -m ai_governor.cli memory-processes
+py -3 -m ai_governor.cli memory-modules --process-name Song.exe
 py -3 -m ai_governor.cli memory-read --profile profiles/songhua.memory.example.json
 py -3 -m ai_governor.cli window-info
 py -3 -m ai_governor.cli capture --out screenshots/current.png
 ```
 
 示例 profile 只用于验证配置格式，不能读取真实游戏；`memory-read` 只在你提供了真实、经过校准的 profile 后才有意义。当前仓库不包含猜测性的游戏地址。
+
+`memory-modules` 只用于列出目标进程的已加载模块，帮助建立版本校准证据。Windows 可能因进程完整性级别或权限返回访问拒绝；此时工具会失败并报告错误，不会降级为任意内存扫描。
 
 `window-info` 只检查窗口和客户区，不会激活、点击或输入游戏。
 
