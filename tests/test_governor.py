@@ -17,6 +17,7 @@ from ai_governor.input import DryRunInputAdapter, InputCommand, InputDisabled, W
 from ai_governor.loop import CompositeObservationSource, GovernorLoop
 from ai_governor.config import Settings
 from ai_governor.deepseek import DeepSeekClient, DeepSeekRequestError
+from ai_governor.e2e import BuildMenuE2EHarness, E2EConfigurationError
 from ai_governor.events import MajorEventDetector
 from ai_governor.feishu import CommandRouter, NullFeishuTransport, FeishuGateway
 from ai_governor.feishu_http import FeishuApiClient, FeishuEventHandler, FeishuHttpTransport, FeishuPayloadCipher
@@ -542,6 +543,37 @@ def test_governor_invokes_major_event_handler_before_strategy(store: SQLiteStore
     result = governor.run_cycle(Observation({"population": 1}))
     assert result["status"] == "executed"
     assert len(seen) == 1
+
+
+def test_build_menu_e2e_requires_explicit_confirmation(store: SQLiteStore, tmp_path: Path) -> None:
+    settings = Settings(db_path=tmp_path / "e2e.db", execution_mode="live", allow_live_input=True)
+    store.set_runtime("live_armed", True)
+    fake_actions = type("Actions", (), {"verifier": type("Verifier", (), {"semantic": True})()})()
+    harness = BuildMenuE2EHarness(settings, store, fake_actions)
+    with pytest.raises(E2EConfigurationError, match="confirm-live-e2e"):
+        harness.run(confirm_live=False)
+
+
+def test_build_menu_e2e_stops_on_first_failed_action(store: SQLiteStore, tmp_path: Path) -> None:
+    settings = Settings(db_path=tmp_path / "e2e.db", execution_mode="live", allow_live_input=True)
+    store.set_runtime("live_armed", True)
+
+    class FakeActions:
+        verifier = type("Verifier", (), {"semantic": True})()
+
+        def __init__(self):
+            self.calls = 0
+
+        def execute_plan(self, plan):
+            self.calls += 1
+            return [{"status": "succeeded" if self.calls == 1 else "blocked", "error": "foreground mismatch"}]
+
+    actions = FakeActions()
+    result = BuildMenuE2EHarness(settings, store, actions).run(attempts=100, confirm_live=True)
+    assert result["completed_attempts"] == 0
+    assert result["open_succeeded"] == 1
+    assert result["blocked"] == 1
+    assert result["passed"] is False
 
 
 def test_governor_halts_on_invalid_brain_response(store: SQLiteStore, tmp_path: Path) -> None:

@@ -8,6 +8,7 @@ from pathlib import Path
 from .config import Settings
 from .capture import CaptureError, ClientAreaCapture, Win32ClientCaptureBackend
 from .deepseek import DeepSeekConfigurationError
+from .e2e import BuildMenuE2EHarness, E2EConfigurationError
 from .feishu import CommandRouter
 from .feishu_http import FeishuApiClient, FeishuCallbackServer, FeishuEventHandler
 from .memory import (
@@ -49,6 +50,11 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--supervise", action="store_true", help="restart unexpected loop crashes with bounded backoff")
     run.add_argument("--restart-limit", type=int, default=3)
     run.add_argument("--restart-backoff", type=float, default=5.0)
+    e2e = sub.add_parser("e2e-build-menu", help="run the explicitly gated real Steam build-menu E2E")
+    e2e.add_argument("--attempts", type=int, default=100)
+    e2e.add_argument("--confirm-live-e2e", action="store_true", help="required confirmation before real input")
+    e2e.add_argument("--open-element", default="build_menu_button")
+    e2e.add_argument("--close-element", default="close_build_menu")
     sub.add_parser("memory-processes", help="list Windows processes for profile calibration")
     memory_modules = sub.add_parser("memory-modules", help="list loaded modules for one Windows process")
     memory_modules.add_argument("--process-name", required=True, help="exact process name, for example Song.exe")
@@ -177,6 +183,21 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 2
             print(json.dumps([cycle.__dict__ for cycle in cycles], ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "e2e-build-menu":
+            try:
+                runtime = build_runtime(settings, store, ("resources", "events", "build_menu", "dialog"))
+                result = BuildMenuE2EHarness(
+                    settings,
+                    store,
+                    runtime.governor.actions,
+                    open_element=args.open_element,
+                    close_element=args.close_element,
+                ).run(attempts=args.attempts, confirm_live=args.confirm_live_e2e)
+            except (E2EConfigurationError, RuntimeConfigurationError, DeepSeekConfigurationError, MemoryConfigurationError, MemoryAccessError, UnsupportedPlatformError, WindowError, CaptureError, OSError, ValueError) as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
         reports = ReportService(store)
         watchdog = Watchdog(store)
