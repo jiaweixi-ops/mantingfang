@@ -313,9 +313,12 @@ class FakeFeishuHttp:
         self.requests = []
 
     def request(self, method, url, headers, body):
-        self.requests.append((method, url, headers, json.loads(body.decode("utf-8"))))
+        payload = None if headers.get("Content-Type", "").startswith("multipart/form-data") else json.loads(body.decode("utf-8"))
+        self.requests.append((method, url, headers, payload, body))
         if url.endswith("tenant_access_token/internal"):
             return 200, json.dumps({"code": 0, "tenant_access_token": "tenant-token", "expire": 7200}).encode()
+        if url.endswith("/open-apis/im/v1/images"):
+            return 200, json.dumps({"code": 0, "data": {"image_key": "img_test"}}).encode()
         return 200, json.dumps({"code": 0, "data": {"message_id": "om_test"}}).encode()
 
 
@@ -328,6 +331,18 @@ def test_feishu_http_transport_caches_token_and_sends_text() -> None:
     assert len(http.requests) == 3
     assert http.requests[1][1].endswith("im/v1/messages?receive_id_type=chat_id")
     assert http.requests[1][2]["Authorization"] == "Bearer tenant-token"
+
+
+def test_feishu_http_transport_uploads_and_sends_image(tmp_path: Path) -> None:
+    image = tmp_path / "event.png"
+    image.write_bytes(b"png-bytes")
+    http = FakeFeishuHttp()
+    transport = FeishuHttpTransport(FeishuApiClient("app", "secret", http=http), "oc_test")
+    transport.send_image(str(image))
+    assert len(http.requests) == 3
+    assert http.requests[1][1].endswith("/open-apis/im/v1/images")
+    assert b"png-bytes" in http.requests[1][4]
+    assert http.requests[2][3]["msg_type"] == "image"
 
 
 def test_feishu_event_handler_handles_url_challenge_and_text(store: SQLiteStore) -> None:
@@ -397,6 +412,29 @@ def test_decision_event_pauses_before_notification(store: SQLiteStore) -> None:
     assert store.get_runtime("paused") is True
     assert store.recent_events(1)[0]["title"] == "重大剧情"
     assert "系统已暂停" in message
+    assert store.get_runtime("pending_decision")["status"] == "pending"
+    assert "已记录重大事件决策" in router.handle("选择方案 方案一")
+    assert store.get_runtime("last_decision")["decision"] == "方案一"
+    assert store.get_runtime("paused") is False
+
+
+def test_decision_resume_command_cannot_bypass_pending_event(store: SQLiteStore) -> None:
+    router = CommandRouter(store, ReportService(store), Watchdog(store))
+    gateway = FeishuGateway(router, NullFeishuTransport())
+    gateway.notify_major_event(MajorEvent("重大剧情", "等待选择", requires_decision=True))
+    assert "仍有待决" in router.handle("继续托管")
+    assert store.get_runtime("paused") is True
+
+
+def test_major_event_screenshot_is_sent_before_text(store: SQLiteStore, tmp_path: Path) -> None:
+    screenshot = tmp_path / "event.png"
+    screenshot.write_bytes(b"png")
+    router = CommandRouter(store, ReportService(store), Watchdog(store))
+    transport = NullFeishuTransport()
+    gateway = FeishuGateway(router, transport)
+    gateway.notify_major_event(MajorEvent("事件", "正文", screenshot_path=str(screenshot)))
+    assert transport.sent_images == [str(screenshot)]
+    assert transport.sent[-1].startswith("🟡 事件")
 
 
 def test_goal_change_replaces_previous_long_term_goal(store: SQLiteStore) -> None:

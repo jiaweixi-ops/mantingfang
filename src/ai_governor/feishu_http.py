@@ -10,7 +10,9 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from hashlib import sha256
+from pathlib import Path
 from typing import Any, Protocol
+from uuid import uuid4
 
 from .feishu import CommandRouter, FeishuTransport
 
@@ -76,13 +78,59 @@ class FeishuApiClient:
             {"receive_id": receive_id, "msg_type": "text", "content": json.dumps({"text": text}, ensure_ascii=False)},
         )
 
+    def upload_image(self, image_path: str | Path) -> str:
+        path = Path(image_path)
+        if not path.is_file():
+            raise FeishuApiError(f"Feishu image file not found: {path}")
+        boundary = f"----CodexFeishu{uuid4().hex}"
+        image = path.read_bytes()
+        body = b"".join([
+            f"--{boundary}\r\n".encode(),
+            b'Content-Disposition: form-data; name="image_type"\r\n\r\nmessage\r\n',
+            f"--{boundary}\r\n".encode(),
+            f'Content-Disposition: form-data; name="image"; filename="{path.name}"\r\n'.encode(),
+            b"Content-Type: image/png\r\n\r\n",
+            image,
+            b"\r\n",
+            f"--{boundary}--\r\n".encode(),
+        ])
+        status, raw = self.http.request(
+            "POST",
+            f"{self.api_base}/open-apis/im/v1/images",
+            {
+                "Authorization": f"Bearer {self.tenant_access_token()}",
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+            },
+            body,
+        )
+        result = self._decode_response(status, raw)
+        image_key = result.get("data", {}).get("image_key")
+        if result.get("code") != 0 or not isinstance(image_key, str) or not image_key:
+            raise FeishuApiError(f"Feishu image upload failed: {result}")
+        return image_key
+
+    def send_image(self, receive_id: str, image_path: str | Path, *, receive_id_type: str = "chat_id") -> dict[str, Any]:
+        image_key = self.upload_image(image_path)
+        return self._json_request(
+            "POST",
+            f"/open-apis/im/v1/messages?receive_id_type={receive_id_type}",
+            {"Authorization": f"Bearer {self.tenant_access_token()}"},
+            {"receive_id": receive_id, "msg_type": "image", "content": json.dumps({"image_key": image_key})},
+        )
+
     def _json_request(self, method: str, path: str, extra_headers: dict[str, str], payload: dict[str, Any]) -> dict[str, Any]:
         headers = {"Content-Type": "application/json; charset=utf-8", **extra_headers}
         status, raw = self.http.request(method, f"{self.api_base}{path}", headers, json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+        return self._decode_response(status, raw)
+
+    @staticmethod
+    def _decode_response(status: int, raw: bytes) -> dict[str, Any]:
         try:
             result = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise FeishuApiError(f"Feishu returned invalid JSON (HTTP {status})") from exc
+        if not isinstance(result, dict):
+            raise FeishuApiError(f"Feishu returned a non-object response (HTTP {status})")
         if status >= 400:
             raise FeishuApiError(f"Feishu HTTP {status}: {result}")
         return result
@@ -96,6 +144,9 @@ class FeishuHttpTransport:
 
     def send_text(self, text: str) -> None:
         self.client.send_text(self.receive_id, text, receive_id_type=self.receive_id_type)
+
+    def send_image(self, image_path: str) -> None:
+        self.client.send_image(self.receive_id, image_path, receive_id_type=self.receive_id_type)
 
 
 @dataclass

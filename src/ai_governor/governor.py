@@ -74,6 +74,8 @@ class Governor:
                 "content": json.dumps({
                     "canonical_game_state": state.to_dict(),
                     "active_goals": goals,
+                    "pending_decision": self.store.get_runtime("pending_decision"),
+                    "last_decision": self.store.get_runtime("last_decision"),
                     "required_schema": {
                         "reason": "string",
                         "actions": [{"action_type": "string", "payload": "object", "risk": "info|safe|important|critical"}],
