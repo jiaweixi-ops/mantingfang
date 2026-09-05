@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from .config import Settings
+from .capture import CaptureError, ClientAreaCapture, Win32ClientCaptureBackend
 from .feishu import CommandRouter
 from .memory import (
     MemoryAccessError,
@@ -35,6 +36,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("memory-processes", help="list Windows processes for profile calibration")
     window_info = sub.add_parser("window-info", help="inspect the configured Steam game window")
     window_info.add_argument("--title", help="exact window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
+    capture = sub.add_parser("capture", help="capture the configured game client area as PNG")
+    capture.add_argument("--title", help="exact window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
+    capture.add_argument("--out", required=True, help="PNG output path")
     memory_read = sub.add_parser("memory-read", help="read only fields from an explicit memory profile")
     memory_read.add_argument("--profile", help="JSON memory profile; defaults to GOVERNOR_MEMORY_PROFILE")
     command = sub.add_parser("command")
@@ -64,6 +68,18 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 2
         print(json.dumps(info.__dict__, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "capture":
+        try:
+            adapter = SteamWindowAdapter(args.title or settings.game_window_title, Win32WindowBackend())
+            frame = ClientAreaCapture(adapter, Win32ClientCaptureBackend()).capture()
+            output = Path(args.out)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(frame.png)
+        except (CaptureError, WindowError, OSError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps({"path": str(output), "width": frame.width, "height": frame.height}, ensure_ascii=False))
         return 0
     if args.command == "memory-read":
         profile_path = Path(args.profile) if args.profile else settings.memory_profile_path

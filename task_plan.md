@@ -77,7 +77,7 @@ Keep the local worktree clean and use the pushed foundation as the baseline for 
 Execute and push each item as its own verified task:
 
 1. [x] Steam Window Adapter: locate the exact game window, read client bounds, handle minimized state, and expose normalized client coordinates.
-2. [ ] Real client-area screenshot capture.
+2. [x] Real client-area screenshot capture.
 3. [ ] Actual ROI image cropping before DeepSeek Vision.
 4. [ ] Windows `SendInput` adapter, initially limited to explicitly safe dry-run/calibration actions.
 5. [ ] Post-action screenshot/state verification.
@@ -91,4 +91,4 @@ Execute and push each item as its own verified task:
 
 ### Current V0.2 task
 
-Task 2 — Real client-area screenshot capture.
+Task 3 — Actual ROI image cropping before DeepSeek Vision.

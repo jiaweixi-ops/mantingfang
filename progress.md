@@ -35,3 +35,5 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - V0.2 Task 1 complete: added Win32 window discovery, client-area geometry, client-to-screen normalized coordinates, minimized-state inspection/restoration, and `window-info` CLI diagnostics. Tests: 16 passed; compileall passed; live window check safely reported no matching game window.
 - Created final commit `ea4433a` for V0.2 Task 1 and pushed it to `origin/main` through the configured GitHub proxy after the direct route hit a Schannel TLS handshake failure. TLS verification remained enabled.
 - Post-push verification passed: local `main` tracks `origin/main`, remote `refs/heads/main` points to `ea4433a2268b6f3b22fe2731c8752128d4760c04`, and the working tree is clean.
+- V0.2 Task 1 delivery record was pushed as `90ffb07`; began V0.2 Task 2, real client-area screenshot capture.
+- V0.2 Task 2 complete: added Win32 GDI client-area capture, standard-library RGBA→PNG encoding, and `capture --out` CLI. Tests: 18 passed; compileall passed; live capture safely reported no matching game window. Task 3 is next: actual ROI cropping before DeepSeek Vision.

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from ai_governor.actions import ActionEngine, DryRunExecutor
+from ai_governor.capture import ClientAreaCapture, encode_rgba_png
 from ai_governor.config import Settings
 from ai_governor.feishu import CommandRouter, NullFeishuTransport, FeishuGateway
 from ai_governor.governor import Governor
@@ -220,3 +221,24 @@ def test_window_adapter_fails_closed_when_window_is_missing() -> None:
             return None
     with pytest.raises(WindowNotFound, match="window not found"):
         SteamWindowAdapter("missing", MissingWindow()).locate()
+
+
+def test_rgba_png_encoder_returns_valid_png_signature() -> None:
+    png = encode_rgba_png(1, 1, bytes((255, 0, 0, 255)))
+    assert png.startswith(b"\x89PNG\r\n\x1a\n")
+    assert b"IHDR" in png and b"IEND" in png
+
+
+class FakeCaptureBackend:
+    def capture_rgba(self, hwnd: int, width: int, height: int) -> bytes:
+        assert (hwnd, width, height) == (99, 1920, 1080)
+        return bytes((0, 0, 0, 255)) * (width * height)
+
+
+def test_client_capture_uses_window_client_dimensions() -> None:
+    frame = ClientAreaCapture(
+        SteamWindowAdapter("满庭芳：宋上繁华", FakeWindowBackend()),
+        FakeCaptureBackend(),
+    ).capture()
+    assert (frame.width, frame.height) == (1920, 1080)
+    assert frame.png.startswith(b"\x89PNG\r\n\x1a\n")
