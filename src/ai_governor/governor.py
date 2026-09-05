@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -64,13 +65,13 @@ class Governor:
             },
             {
                 "role": "user",
-                "content": {
+                "content": json.dumps({
                     "canonical_game_state": state.to_dict(),
                     "active_goals": goals,
                     "required_schema": {
                         "reason": "string",
                         "actions": [{"action_type": "string", "payload": "object", "risk": "info|safe|important|critical"}],
                     },
-                },
+                }, ensure_ascii=False),
             },
         ]

@@ -69,6 +69,8 @@ py -3 -m ai_governor.cli capture --out screenshots/current.png
 
 `StateAggregator` 将 `readonly-memory` 作为数字字段的高优先级来源，将 DeepSeek 区域视觉作为补充来源；同一字段不一致时保留内存优先结果，同时在 `conflicts` 中记录两份证据，供策略层决定是否暂停。
 
+Governor 发给 DeepSeek Chat Completions 的用户上下文会序列化为 UTF-8 JSON 文本；这样既保留结构化状态，又符合 Chat API 对 `messages[].content` 的类型要求。视觉请求仍使用文本与 `image_url` content-parts。
+
 `window-info` 只检查窗口和客户区，不会激活、点击或输入游戏。
 
 `capture` 读取窗口客户区并保存 PNG；窗口不存在、最小化或 GDI 捕获失败时会返回错误，不会伪造截图。实机视觉路径应将 `CapturedFrame.rgba` 传给 `PerceptionEngine.observe_rgba()`，由程序先裁剪 ROI，再调用 DeepSeek。

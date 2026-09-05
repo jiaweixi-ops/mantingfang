@@ -200,7 +200,8 @@ def test_governor_sends_canonical_state_to_brain(store: SQLiteStore, tmp_path: P
         Observation({"values": {"population": 9, "food": 100}}, source="readonly-memory", region="memory"),
     ])
     assert result["status"] == "executed"
-    state = brain.messages[1]["content"]["canonical_game_state"]
+    assert isinstance(brain.messages[1]["content"], str)
+    state = json.loads(brain.messages[1]["content"])["canonical_game_state"]
     assert state["values"] == {"population": 9, "food": 100}
     assert state["provenance"]["population"]["source"] == "readonly-memory"
 

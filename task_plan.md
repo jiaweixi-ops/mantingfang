@@ -96,3 +96,11 @@ Execute and push each item as its own verified task:
 ### Current V0.2 task
 
 Task 10 — Calibrate the first real read-only memory fields for the installed game build.
+
+## Latest acceptance follow-up
+
+- [x] Serialize Governor state context as JSON text before DeepSeek Chat Completions requests.
+- [ ] Add a guarded PlannedAction-to-game-skill bridge; live execution remains disabled until semantic verification exists.
+- [ ] Strengthen post-action verification from screenshot availability to semantic state change.
+- [ ] Add a real multi-source `GovernorLoop` entry point and keep it dry-run by default.
+- [ ] Add Feishu callback server/decryption, retry and usage accounting, and the expanded daily report.
