@@ -78,7 +78,7 @@ Execute and push each item as its own verified task:
 
 1. [x] Steam Window Adapter: locate the exact game window, read client bounds, handle minimized state, and expose normalized client coordinates.
 2. [x] Real client-area screenshot capture.
-3. [ ] Actual ROI image cropping before DeepSeek Vision.
+3. [x] Actual ROI image cropping before DeepSeek Vision.
 4. [ ] Windows `SendInput` adapter, initially limited to explicitly safe dry-run/calibration actions.
 5. [ ] Post-action screenshot/state verification.
 6. [ ] Fix major-event pause ordering and ensure the watchdog is paused before notification.
@@ -91,4 +91,4 @@ Execute and push each item as its own verified task:
 
 ### Current V0.2 task
 
-Task 3 — Actual ROI image cropping before DeepSeek Vision.
+Task 4 — Windows `SendInput` adapter, initially limited to explicitly safe dry-run/calibration actions.

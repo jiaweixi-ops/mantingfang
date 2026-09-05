@@ -106,17 +106,30 @@ def test_governor_halts_on_invalid_brain_response(store: SQLiteStore, tmp_path: 
 
 
 class FakeAnalyzer:
+    def __init__(self) -> None:
+        self.last_image = b""
+
     def analyze_image_json(self, image: bytes, prompt: str, *, model: str | None = None) -> dict:
-        assert image == b"frame"
+        self.last_image = image
         assert "只读取人口" in prompt
         return {"population": 10, "confidence": 0.9}
 
 
 def test_perception_uses_task_region() -> None:
-    engine = PerceptionEngine(FakeAnalyzer(), RegionCatalog())
+    analyzer = FakeAnalyzer()
+    engine = PerceptionEngine(analyzer, RegionCatalog())
     observation = engine.observe(b"frame", "resources", context="检查资源")
     assert observation.region == "resources"
     assert observation.data["population"] == 10
+
+
+def test_perception_crops_rgba_before_analysis() -> None:
+    analyzer = FakeAnalyzer()
+    engine = PerceptionEngine(analyzer, RegionCatalog())
+    observation = engine.observe_rgba(bytes((1, 2, 3, 255)) * (100 * 100), 100, 100, "resources")
+    assert observation.data["crop_box"] == (0, 0, 30, 16)
+    assert analyzer.last_image.startswith(b"\x89PNG\r\n\x1a\n")
+    assert struct.unpack(">II", analyzer.last_image[16:24]) == (30, 16)
 
 
 def test_region_boxes_are_resolution_independent() -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from .capture import encode_rgba_png
 from .models import Observation, RegionSpec
 
 
@@ -46,6 +47,30 @@ class PerceptionEngine:
 
     def observe(self, frame: bytes, region_name: str, *, context: str = "") -> Observation:
         region = self.regions.get(region_name)
+        return self._analyze(frame, region, context=context, crop_box=None)
+
+    def observe_rgba(self, rgba: bytes, width: int, height: int, region_name: str, *, context: str = "") -> Observation:
+        """Crop a real client-area frame before sending it to DeepSeek."""
+        region = self.regions.get(region_name)
+        left, top, right, bottom = region.crop_box(width, height)
+        cropped_width, cropped_height = right - left, bottom - top
+        if cropped_width <= 0 or cropped_height <= 0:
+            raise ValueError(f"region {region_name} is empty at {width}x{height}")
+        expected = width * height * 4
+        if len(rgba) != expected:
+            raise ValueError("RGBA buffer size does not match frame dimensions")
+        cropped = b"".join(
+            rgba[(row * width + left) * 4:(row * width + right) * 4]
+            for row in range(top, bottom)
+        )
+        return self._analyze(
+            encode_rgba_png(cropped_width, cropped_height, cropped),
+            region,
+            context=context,
+            crop_box=(left, top, right, bottom),
+        )
+
+    def _analyze(self, frame: bytes, region: RegionSpec, *, context: str, crop_box: tuple[int, int, int, int] | None) -> Observation:
         prompt = (
             f"任务上下文：{context or '读取当前区域状态'}\n"
             f"关注区域：{region.name}\n{region.focus_instruction}\n"
@@ -55,7 +80,9 @@ class PerceptionEngine:
         confidence = result.get("confidence")
         if confidence is not None and not isinstance(confidence, (int, float)):
             raise ValueError("vision confidence must be numeric")
-        return Observation(data=result, source="deepseek-vision", region=region_name, confidence=confidence)
+        if crop_box is not None:
+            result = {**result, "crop_box": crop_box}
+        return Observation(data=result, source="deepseek-vision", region=region.name, confidence=confidence)
 
 
 class StaticFrameSource:

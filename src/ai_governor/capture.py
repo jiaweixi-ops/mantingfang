@@ -19,6 +19,7 @@ class CapturedFrame:
     width: int
     height: int
     png: bytes
+    rgba: bytes
 
 
 class ClientCaptureBackend(Protocol):
@@ -142,4 +143,4 @@ class ClientAreaCapture:
         if info.minimized:
             raise CaptureError("game window is minimized")
         rgba = self.backend.capture_rgba(info.hwnd, info.client_width, info.client_height)
-        return CapturedFrame(info.client_width, info.client_height, encode_rgba_png(info.client_width, info.client_height, rgba))
+        return CapturedFrame(info.client_width, info.client_height, encode_rgba_png(info.client_width, info.client_height, rgba), rgba)
