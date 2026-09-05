@@ -33,4 +33,5 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Final post-push verification passed for the foundation; local `main` tracked `origin/main` and the working tree was clean.
 - Latest referenced-conversation acceptance reviewed: V0.1 Foundation passes, formal autonomous game control does not yet pass. Began V0.2 Task 1, Steam Window Adapter, as a separately verifiable and pushable change.
 - V0.2 Task 1 complete: added Win32 window discovery, client-area geometry, client-to-screen normalized coordinates, minimized-state inspection/restoration, and `window-info` CLI diagnostics. Tests: 16 passed; compileall passed; live window check safely reported no matching game window.
-- Created commit `348146d` for V0.2 Task 1. The first direct push attempt hit a Schannel TLS handshake failure; retrying through the configured GitHub proxy without disabling TLS verification.
+- Created final commit `ea4433a` for V0.2 Task 1 and pushed it to `origin/main` through the configured GitHub proxy after the direct route hit a Schannel TLS handshake failure. TLS verification remained enabled.
+- Post-push verification passed: local `main` tracks `origin/main`, remote `refs/heads/main` points to `ea4433a2268b6f3b22fe2731c8752128d4760c04`, and the working tree is clean.
