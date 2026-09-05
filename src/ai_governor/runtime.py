@@ -110,25 +110,27 @@ def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str]
         sources.append(MemoryObservationSource(MemorySampler(profile, WindowsProcessEnumerator(), WindowsMemoryBackend())))
     source = CompositeObservationSource(tuple(sources))
     aggregator = StateAggregator()
-    latest_ui_elements: dict[str, dict] = {}
+    latest_ui_elements: dict[tuple[str, str], dict] = {}
 
     def observe_state() -> dict:
         state = aggregator.aggregate(source.observe()).to_dict()["values"]
         latest_ui_elements.clear()
-        elements = state.get("ui_elements")
-        if isinstance(elements, list):
-            for element in elements:
-                if isinstance(element, dict) and isinstance(element.get("id"), str):
-                    latest_ui_elements[element["id"]] = element
+        elements_by_region = state.get("ui_elements_by_region")
+        if isinstance(elements_by_region, dict):
+            for region_name, elements in elements_by_region.items():
+                if isinstance(region_name, str) and isinstance(elements, list):
+                    for element in elements:
+                        if isinstance(element, dict) and isinstance(element.get("id"), str):
+                            latest_ui_elements[(region_name, element["id"])] = element
         return state
 
-    def resolve_ui_element(element_id: str) -> dict | None:
-        if element_id not in latest_ui_elements:
+    def resolve_ui_element(region_name: str, element_id: str) -> dict | None:
+        if (region_name, element_id) not in latest_ui_elements:
             # The first Governor observation may happen before a live action is
             # preflighted. Reuse the local ROI cache and refresh this resolver
             # view without forcing unnecessary Vision calls.
             observe_state()
-        return latest_ui_elements.get(element_id)
+        return latest_ui_elements.get((region_name, element_id))
 
     if settings.execution_mode == "dry-run":
         executor = DryRunExecutor()

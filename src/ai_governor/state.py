@@ -22,7 +22,7 @@ FIELD_ALIASES = {
     "workers": "labor",
 }
 
-_IGNORED_KEYS = {"confidence", "crop_box", "errors", "values"}
+_IGNORED_KEYS = {"confidence", "crop_box", "errors", "values", "ui_elements", "ui_elements_by_region"}
 
 
 @dataclass(frozen=True)
@@ -68,8 +68,20 @@ class StateAggregator:
         selected: dict[str, StateValue] = {}
         conflicts: list[dict[str, Any]] = []
         latest: str | None = None
+        ui_by_region: dict[str, list[dict[str, Any]]] = {}
+        ui_observation: Observation | None = None
         for observation in observations:
             latest = max(latest or observation.observed_at, observation.observed_at)
+            raw_ui = observation.data.get("ui_elements")
+            if isinstance(raw_ui, list) and observation.region:
+                ui_by_region[observation.region] = raw_ui
+                ui_observation = observation
+            raw_ui_by_region = observation.data.get("ui_elements_by_region")
+            if isinstance(raw_ui_by_region, dict):
+                for region, elements in raw_ui_by_region.items():
+                    if isinstance(region, str) and isinstance(elements, list):
+                        ui_by_region[region] = elements
+                        ui_observation = observation
             for raw_name, value in self._fields(observation):
                 if value is None:
                     continue
@@ -93,6 +105,14 @@ class StateAggregator:
                     })
                 if self._rank(candidate) > self._rank(current):
                     selected[name] = candidate
+        if ui_by_region and ui_observation is not None:
+            selected["ui_elements_by_region"] = StateValue(
+                value=ui_by_region,
+                source=ui_observation.source,
+                region=None,
+                observed_at=ui_observation.observed_at,
+                confidence=ui_observation.confidence,
+            )
         return CanonicalGameState(
             values={name: item.value for name, item in selected.items()},
             provenance=selected,

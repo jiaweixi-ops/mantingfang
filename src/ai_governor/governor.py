@@ -64,8 +64,9 @@ class Governor:
                     "高风险剧情、战争、不可逆政策使用 critical，程序会阻止它们。"
                     "可用游戏 Skill 只有："
                     f"{', '.join(GAME_SKILLS)}。"
-                    "动作必须使用 action_type=Skill 名称，并携带由视觉 UI 边界框校准出的 commands；"
-                    "不要猜测坐标。每个 live 动作必须同时提供非空 expected_state 或 changed_fields，"
+                    "动作必须使用 action_type=Skill 名称，并携带 target_region 与 target_element；"
+                    "target_element 必须来自该区域的视觉 ui_elements，程序会把局部 bbox 转成全窗口坐标。"
+                    "不要输出 commands，也不要猜测坐标。每个 live 动作必须同时提供非空 expected_state 或 changed_fields，"
                     "否则会在发送鼠标键盘前被阻止。"
                 ),
             },

@@ -50,6 +50,16 @@ class RegionSpec:
             round(height * self.bottom),
         )
 
+    def local_to_global_bbox(self, bbox: list[float] | tuple[float, float, float, float]) -> list[float]:
+        """Convert a normalized bbox inside this ROI to full-window coordinates."""
+        left, top, right, bottom = bbox
+        return [
+            self.left + left * (self.right - self.left),
+            self.top + top * (self.bottom - self.top),
+            self.left + right * (self.right - self.left),
+            self.top + bottom * (self.bottom - self.top),
+        ]
+
 
 @dataclass
 class Observation:

@@ -80,7 +80,7 @@ class PerceptionEngine:
             "bbox 是相对于当前裁剪图的 0 到 1 归一化坐标，不要猜测不可见控件。"
         )
         result = self.analyzer.analyze_image_json(frame, prompt, model=self.model)
-        result = self._normalize_ui_elements(result)
+        result = self._normalize_ui_elements(result, region)
         confidence = result.get("confidence")
         if confidence is not None and not isinstance(confidence, (int, float)):
             raise ValueError("vision confidence must be numeric")
@@ -89,7 +89,7 @@ class PerceptionEngine:
         return Observation(data=result, source="deepseek-vision", region=region.name, confidence=confidence)
 
     @staticmethod
-    def _normalize_ui_elements(result: dict[str, Any]) -> dict[str, Any]:
+    def _normalize_ui_elements(result: dict[str, Any], region: RegionSpec) -> dict[str, Any]:
         raw_elements = result.get("ui_elements")
         if raw_elements is None:
             return result
@@ -112,7 +112,12 @@ class PerceptionEngine:
             left, top, right, bottom = values
             if not 0 <= left < right <= 1 or not 0 <= top < bottom <= 1:
                 raise ValueError("ui element bbox must use normalized coordinates between 0 and 1")
-            normalized.append({**item, "id": element_id.strip(), "bbox": values})
+            normalized.append({
+                **item,
+                "id": element_id.strip(),
+                "bbox": values,
+                "global_bbox": region.local_to_global_bbox(values),
+            })
         return {**result, "ui_elements": normalized}
 
 

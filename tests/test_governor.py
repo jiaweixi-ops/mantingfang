@@ -153,25 +153,29 @@ def test_live_skill_preflight_translates_before_input() -> None:
     action = PlannedAction(
         "OPEN_BUILD_MENU",
         {
+            "target_region": "build_menu",
             "target_element": "build",
             "changed_fields": ["menu"],
         },
     )
-    SkillTranslator(ui_element_supplier=lambda _: {"bbox": [0.1, 0.2, 0.3, 0.4]}).validate_live(action)
+    SkillTranslator(ui_element_supplier=lambda region, _: {"global_bbox": [0.1, 0.82, 0.3, 0.86]}).validate_live(action)
 
 
 def test_skill_translator_resolves_command_from_observed_ui_element() -> None:
     action = PlannedAction(
         "OPEN_BUILD_MENU",
-        {"target_element": "build", "changed_fields": ["menu"]},
+        {"target_region": "build_menu", "target_element": "build", "changed_fields": ["menu"]},
     )
     translator = SkillTranslator(
-        ui_element_supplier=lambda element_id: {"id": element_id, "bbox": [0.1, 0.2, 0.3, 0.4]}
+        ui_element_supplier=lambda region, element_id: {
+            "id": element_id,
+            "global_bbox": [0.2, 0.82, 0.3, 0.86],
+        }
     )
     command = translator.translate(action)[0]
     assert command.kind == "click"
-    assert command.x_ratio == pytest.approx(0.2)
-    assert command.y_ratio == pytest.approx(0.3)
+    assert command.x_ratio == pytest.approx(0.25)
+    assert command.y_ratio == pytest.approx(0.84)
 
 
 def test_action_engine_blocks_live_action_before_executor_on_bad_contract(store: SQLiteStore, tmp_path: Path) -> None:
@@ -502,6 +506,15 @@ def test_canonical_state_normalizes_chinese_fields_and_keeps_map_data() -> None:
     assert state.values["buildings"][0]["type"] == "farm"
 
 
+def test_canonical_state_keeps_ui_elements_separated_by_region() -> None:
+    state = StateAggregator().aggregate([
+        Observation({"ui_elements": [{"id": "build", "global_bbox": [0.1, 0.8, 0.2, 0.9]}]}, source="deepseek-vision", region="build_menu"),
+        Observation({"ui_elements": [{"id": "confirm", "global_bbox": [0.4, 0.4, 0.6, 0.6]}]}, source="deepseek-vision", region="dialog"),
+    ])
+    assert set(state.values["ui_elements_by_region"]) == {"build_menu", "dialog"}
+    assert state.values["ui_elements_by_region"]["dialog"][0]["id"] == "confirm"
+
+
 def test_governor_halts_on_invalid_brain_response(store: SQLiteStore, tmp_path: Path) -> None:
     settings = Settings(db_path=tmp_path / "governor.db")
     engine = ActionEngine(settings, store, DryRunExecutor())
@@ -536,6 +549,7 @@ def test_perception_normalizes_valid_ui_elements() -> None:
     observation = PerceptionEngine(Analyzer(), RegionCatalog()).observe(b"frame", "build_menu")
     assert observation.data["ui_elements"][0]["id"] == "build"
     assert observation.data["ui_elements"][0]["bbox"] == [0.1, 0.2, 0.3, 0.4]
+    assert observation.data["ui_elements"][0]["global_bbox"] == pytest.approx([0.048, 0.824, 0.144, 0.868])
 
 
 def test_perception_rejects_invalid_ui_element_bbox() -> None:

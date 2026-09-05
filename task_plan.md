@@ -117,6 +117,9 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Add regression tests proving invalid live actions are blocked before the executor and foreground mismatches emit no input.
 - [x] Add local ROI/frame change filtering so unchanged regions do not call DeepSeek Vision.
 - [x] Add calibrated UI bounding-box output and a resolver from UI elements to skill commands.
+- [x] Convert ROI-local UI bounding boxes to full-window normalized coordinates before input.
+- [x] Preserve UI elements by source region and require `target_region` in Skill payloads.
+- [x] Align Governor prompt and SkillTranslator contract; add `SELECT_EVENT_OPTION`.
 - [x] Add Feishu screenshot upload and explicit remote decision reply handling.
 - [x] Add CI for the source-level safety and integration checks.
 - [ ] Add a separately gated real Steam E2E harness; real E2E remains unverified until the game is running with calibrated UI/profile data.

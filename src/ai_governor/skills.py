@@ -31,6 +31,7 @@ GAME_SKILLS = (
     "SAVE_GAME",
     "CANCEL_CURRENT_ACTION",
     "CLOSE_DIALOG",
+    "SELECT_EVENT_OPTION",
 )
 
 
@@ -67,7 +68,7 @@ class InputAdapter(Protocol):
 class SkillTranslator:
     """Translate only explicit, schema-checked game skills into input commands."""
 
-    ui_element_supplier: Callable[[str], dict[str, Any] | None] | None = None
+    ui_element_supplier: Callable[[str, str], dict[str, Any] | None] | None = None
 
     @staticmethod
     def supported_skills() -> tuple[str, ...]:
@@ -97,18 +98,23 @@ class SkillTranslator:
 
     def _command_from_ui_element(self, action: PlannedAction) -> InputCommand:
         target_id = action.payload.get("target_element")
+        target_region = action.payload.get("target_region")
         if not isinstance(target_id, str) or not target_id.strip():
             raise SkillTranslationError(
                 f"game skill {action.action_type} requires target_element from UI perception"
             )
+        if not isinstance(target_region, str) or not target_region.strip():
+            raise SkillTranslationError(
+                f"game skill {action.action_type} requires target_region from UI perception"
+            )
         if self.ui_element_supplier is None:
             raise SkillTranslationError("UI element resolver is not configured")
-        element = self.ui_element_supplier(target_id.strip())
+        element = self.ui_element_supplier(target_region.strip(), target_id.strip())
         if not isinstance(element, dict):
             raise SkillTranslationError(f"UI element not found: {target_id}")
-        bbox = element.get("bbox")
+        bbox = element.get("global_bbox")
         if not isinstance(bbox, list) or len(bbox) != 4:
-            raise SkillTranslationError(f"UI element has invalid bbox: {target_id}")
+            raise SkillTranslationError(f"UI element has invalid global_bbox: {target_region}/{target_id}")
         left, top, right, bottom = bbox
         try:
             x_ratio = (float(left) + float(right)) / 2
