@@ -27,6 +27,7 @@
 - Feishu remote control is now an explicit decision boundary: screenshot upload failures are audited while text notification still goes out, and a pending major event must be resolved with a decision command before the watchdog can resume. The selected decision is included in the next DeepSeek strategy context.
 - CI is now configured as a repository check, but a local green test run is not evidence that GitHub's hosted job completed. The remote workflow result must be checked separately after push.
 - The latest acceptance found a real misclick risk: Vision bbox coordinates are local to a cropped ROI. The implementation now preserves both local `bbox` and full-window `global_bbox`; only the latter reaches the input adapter. Region-qualified UI IDs prevent a dialog control from shadowing a build-menu control with the same id.
+- A module-only Feishu notifier was insufficient for the requested behavior. Runtime now parses structured event facts from observations before strategy execution, deduplicates them against persisted events, captures the latest client frame, and either sends through the configured Feishu gateway or records an explicit audit when notification credentials are absent.
 
 - Use Python 3.11+ with a standard-library-first core to keep local/offline setup portable.
 - Use SQLite for durable local state and an append-only audit trail.

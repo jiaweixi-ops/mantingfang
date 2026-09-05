@@ -120,6 +120,8 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Convert ROI-local UI bounding boxes to full-window normalized coordinates before input.
 - [x] Preserve UI elements by source region and require `target_region` in Skill payloads.
 - [x] Align Governor prompt and SkillTranslator contract; add `SELECT_EVENT_OPTION`.
+- [x] Add structured major-event detection and connect it to the runtime loop.
+- [x] Save the latest client frame for detected events and notify Feishu when configured.
 - [x] Add Feishu screenshot upload and explicit remote decision reply handling.
 - [x] Add CI for the source-level safety and integration checks.
 - [ ] Add a separately gated real Steam E2E harness; real E2E remains unverified until the game is running with calibrated UI/profile data.

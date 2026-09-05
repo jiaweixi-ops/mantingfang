@@ -17,6 +17,7 @@ from ai_governor.input import DryRunInputAdapter, InputCommand, InputDisabled, W
 from ai_governor.loop import CompositeObservationSource, GovernorLoop
 from ai_governor.config import Settings
 from ai_governor.deepseek import DeepSeekClient, DeepSeekRequestError
+from ai_governor.events import MajorEventDetector
 from ai_governor.feishu import CommandRouter, NullFeishuTransport, FeishuGateway
 from ai_governor.feishu_http import FeishuApiClient, FeishuEventHandler, FeishuHttpTransport, FeishuPayloadCipher
 from ai_governor.governor import Governor
@@ -513,6 +514,34 @@ def test_canonical_state_keeps_ui_elements_separated_by_region() -> None:
     ])
     assert set(state.values["ui_elements_by_region"]) == {"build_menu", "dialog"}
     assert state.values["ui_elements_by_region"]["dialog"][0]["id"] == "confirm"
+
+
+def test_major_event_detector_deduplicates_structured_vision_events(store: SQLiteStore) -> None:
+    detector = MajorEventDetector(store)
+    observation = Observation({
+        "events": [{"title": "粮食危机", "body": "粮食即将耗尽", "severity": "critical"}],
+    }, source="deepseek-vision", region="events")
+    first = detector.detect([observation])
+    assert len(first) == 1
+    assert first[0].requires_decision is True
+    store.add_event(first[0])
+    assert detector.detect([observation]) == []
+
+
+def test_governor_invokes_major_event_handler_before_strategy(store: SQLiteStore, tmp_path: Path) -> None:
+    settings = Settings(db_path=tmp_path / "events.db")
+    engine = ActionEngine(settings, store, DryRunExecutor())
+    seen = []
+    governor = Governor(
+        store,
+        FakeBrain({"reason": "observe", "actions": []}),
+        engine,
+        Watchdog(store),
+        major_event_handler=lambda observations: seen.extend(observations),
+    )
+    result = governor.run_cycle(Observation({"population": 1}))
+    assert result["status"] == "executed"
+    assert len(seen) == 1
 
 
 def test_governor_halts_on_invalid_brain_response(store: SQLiteStore, tmp_path: Path) -> None:

@@ -2,18 +2,23 @@ from __future__ import annotations
 
 import hashlib
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Callable, Iterable
 
 from .actions import ActionEngine, DryRunExecutor
-from .capture import ClientAreaCapture, Win32ClientCaptureBackend
+from .capture import CapturedFrame, ClientAreaCapture, Win32ClientCaptureBackend
 from .config import Settings
 from .deepseek import DeepSeekClient, DeepSeekConfigurationError
+from .events import MajorEventDetector
+from .feishu import CommandRouter, FeishuGateway
+from .feishu_http import FeishuApiClient, FeishuHttpTransport
 from .governor import Governor
 from .input import Win32SendInputBackend, WindowsSendInputAdapter
 from .loop import CompositeObservationSource, GovernorLoop
 from .memory import MemoryProfile, MemorySampler, WindowsMemoryBackend, WindowsProcessEnumerator
 from .perception import PerceptionEngine, RegionCatalog
+from .reporting import ReportService
 from .skills import InputActionExecutor, SkillTranslator
 from .state import StateAggregator
 from .storage import SQLiteStore
@@ -35,9 +40,11 @@ class SteamVisionObservationSource:
     clock: Callable[[], float] = time.monotonic
     _cache: dict[str, tuple[str, float, object]] = field(default_factory=dict, init=False, repr=False)
     last_changed_regions: tuple[str, ...] = field(default_factory=tuple, init=False)
+    last_frame: CapturedFrame | None = field(default=None, init=False, repr=False)
 
     def observe(self):
         frame = self.capture.capture()
+        self.last_frame = frame
         now = self.clock()
         observations = []
         changed: list[str] = []
@@ -110,6 +117,7 @@ def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str]
         sources.append(MemoryObservationSource(MemorySampler(profile, WindowsProcessEnumerator(), WindowsMemoryBackend())))
     source = CompositeObservationSource(tuple(sources))
     aggregator = StateAggregator()
+    watchdog = Watchdog(store)
     latest_ui_elements: dict[tuple[str, str], dict] = {}
 
     def observe_state() -> dict:
@@ -132,6 +140,29 @@ def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str]
             observe_state()
         return latest_ui_elements.get((region_name, element_id))
 
+    detector = MajorEventDetector(store)
+    gateway: FeishuGateway | None = None
+    if settings.feishu_app_id and settings.feishu_app_secret and settings.feishu_target_chat_id:
+        feishu_client = FeishuApiClient(settings.feishu_app_id, settings.feishu_app_secret, settings.feishu_api_base)
+        gateway = FeishuGateway(
+            CommandRouter(store, ReportService(store), watchdog),
+            FeishuHttpTransport(feishu_client, settings.feishu_target_chat_id),
+        )
+
+    def handle_major_events(observations) -> None:
+        for event in detector.detect(observations):
+            screenshot_path: Path | None = None
+            if vision_source.last_frame is not None:
+                screenshot_path = settings.db_path.parent / "screenshots" / f"major-event-{event.id}.png"
+                screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+                screenshot_path.write_bytes(vision_source.last_frame.png)
+            event_with_screenshot = replace(event, screenshot_path=str(screenshot_path) if screenshot_path else None)
+            if gateway is not None:
+                gateway.notify_major_event(event_with_screenshot)
+            else:
+                store.add_event(event_with_screenshot)
+                store.audit("feishu", "major event recorded without configured notification", {"event_id": event.id})
+
     if settings.execution_mode == "dry-run":
         executor = DryRunExecutor()
         verifier = None
@@ -146,7 +177,6 @@ def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str]
         )
         executor = InputActionExecutor(adapter, translator=translator, observe_state=observe_state)
         verifier = SemanticStateVerifier(observe_state)
-    watchdog = Watchdog(store)
     actions = ActionEngine(
         settings,
         store,
@@ -154,6 +184,14 @@ def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str]
         verifier,
         preflight=translator.validate_live if settings.execution_mode != "dry-run" else None,
     )
-    governor = Governor(store, client, actions, watchdog, model=settings.deepseek_reasoning_model, state_aggregator=aggregator)
+    governor = Governor(
+        store,
+        client,
+        actions,
+        watchdog,
+        model=settings.deepseek_reasoning_model,
+        state_aggregator=aggregator,
+        major_event_handler=handle_major_events,
+    )
     loop = GovernorLoop(source, governor, store, watchdog)
     return GovernorRuntime(loop=loop, source=source, governor=governor)

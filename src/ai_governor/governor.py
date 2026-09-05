@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from .actions import ActionEngine
 from .models import ActionPlan, Observation
@@ -31,6 +31,7 @@ class Governor:
     watchdog: Watchdog
     model: str | None = None
     state_aggregator: StateAggregator = field(default_factory=StateAggregator)
+    major_event_handler: Callable[[list[Observation]], None] | None = None
 
     def run_cycle(self, observation: Observation) -> dict[str, Any]:
         return self.run_observations([observation])
@@ -42,6 +43,12 @@ class Governor:
             self.store.add_observation(observation)
         state = self.state_aggregator.aggregate(observations)
         self.watchdog.heartbeat()
+        if self.major_event_handler is not None:
+            try:
+                self.major_event_handler(observations)
+            except Exception as exc:  # noqa: BLE001 — event delivery must halt safely
+                self.watchdog.require_recovery(f"major event handling failed: {exc}")
+                return {"status": "needs_recovery", "error": str(exc)}
         if self.store.get_runtime("paused", False) or self.store.get_runtime("recovery_required", False):
             return {"status": "blocked", "reason": "paused or recovery required"}
         try:
@@ -67,7 +74,8 @@ class Governor:
                     "动作必须使用 action_type=Skill 名称，并携带 target_region 与 target_element；"
                     "target_element 必须来自该区域的视觉 ui_elements，程序会把局部 bbox 转成全窗口坐标。"
                     "不要输出 commands，也不要猜测坐标。每个 live 动作必须同时提供非空 expected_state 或 changed_fields，"
-                    "否则会在发送鼠标键盘前被阻止。"
+                    "否则会在发送鼠标键盘前被阻止。SELECT_EVENT_OPTION 用于事件选项，"
+                    "target_region 应为 dialog 或 events。"
                 ),
             },
             {
