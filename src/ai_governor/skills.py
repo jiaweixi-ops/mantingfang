@@ -11,6 +11,54 @@ class SkillTranslationError(ValueError):
     pass
 
 
+GAME_SKILLS = (
+    "OPEN_BUILD_MENU",
+    "CLOSE_BUILD_MENU",
+    "OPEN_RESIDENTIAL_TAB",
+    "OPEN_AGRICULTURE_TAB",
+    "OPEN_INDUSTRY_TAB",
+    "OPEN_COMMERCIAL_TAB",
+    "PAN_CAMERA",
+    "ZOOM_IN",
+    "ZOOM_OUT",
+    "PAUSE_GAME",
+    "SET_SPEED_1",
+    "SET_SPEED_2",
+    "SET_SPEED_3",
+    "OPEN_FINANCE",
+    "OPEN_TECH",
+    "OPEN_POLICY",
+    "SAVE_GAME",
+    "CANCEL_CURRENT_ACTION",
+    "CLOSE_DIALOG",
+)
+
+
+class PreActionValidationError(ValueError):
+    """A live action failed validation before any input was emitted."""
+
+
+def validate_semantic_contract(action: PlannedAction) -> None:
+    """Validate the post-action predicate before a live executor is called."""
+
+    expected = action.payload.get("expected_state")
+    changed_fields = action.payload.get("changed_fields")
+    has_expected = isinstance(expected, dict) and bool(expected)
+    has_changed = (
+        isinstance(changed_fields, list)
+        and bool(changed_fields)
+        and all(isinstance(field, str) and field for field in changed_fields)
+    )
+    if not has_expected and not has_changed:
+        raise PreActionValidationError(
+            "live action requires a non-empty expected_state or changed_fields predicate"
+        )
+    if isinstance(expected, dict) and any(not isinstance(key, str) or not key for key in expected):
+        raise PreActionValidationError("expected_state keys must be non-empty strings")
+
+
+
+
 class InputAdapter(Protocol):
     def execute(self, command: InputCommand) -> dict[str, Any]: ...
 
@@ -18,6 +66,16 @@ class InputAdapter(Protocol):
 @dataclass(frozen=True)
 class SkillTranslator:
     """Translate only explicit, schema-checked game skills into input commands."""
+
+    @staticmethod
+    def supported_skills() -> tuple[str, ...]:
+        return GAME_SKILLS
+
+    def validate_live(self, action: PlannedAction) -> None:
+        validate_semantic_contract(action)
+        # Translation is deliberately performed during preflight. It validates the
+        # complete command sequence before the adapter is allowed to emit input.
+        self.translate(action)
 
     def translate(self, action: PlannedAction) -> list[InputCommand]:
         payload = action.payload
@@ -28,6 +86,10 @@ class SkillTranslator:
             return [self._command(item) for item in raw_commands]
         if action.action_type in {"move", "click", "key_down", "key_up"}:
             return [self._command({"kind": action.action_type, **payload})]
+        if action.action_type in GAME_SKILLS:
+            raise SkillTranslationError(
+                f"game skill {action.action_type} requires calibrated commands from UI perception"
+            )
         raise SkillTranslationError(f"unsupported game skill: {action.action_type}")
 
     def _command(self, raw: Any) -> InputCommand:

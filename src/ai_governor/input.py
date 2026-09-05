@@ -66,6 +66,9 @@ class WindowsSendInputAdapter:
         if not self.enabled:
             raise InputDisabled("SendInput is disabled; use dry-run or explicitly arm live input")
         info = self.window.locate()
+        # Never focus the game automatically. A foreground mismatch is a hard
+        # stop so SendInput cannot leak into another application.
+        self.window.require_foreground(info)
         if command.kind == "click" and not self.allow_clicks:
             raise InputDisabled("mouse clicks are not enabled by input policy")
         if command.kind in {"key_down", "key_up"} and not self.allow_keyboard:

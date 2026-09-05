@@ -12,7 +12,7 @@ from .input import Win32SendInputBackend, WindowsSendInputAdapter
 from .loop import CompositeObservationSource, GovernorLoop
 from .memory import MemoryProfile, MemorySampler, WindowsMemoryBackend, WindowsProcessEnumerator
 from .perception import PerceptionEngine, RegionCatalog
-from .skills import InputActionExecutor
+from .skills import InputActionExecutor, SkillTranslator
 from .state import StateAggregator
 from .storage import SQLiteStore
 from .verification import SemanticStateVerifier
@@ -84,6 +84,7 @@ def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str]
         executor = DryRunExecutor()
         verifier = None
     else:
+        translator = SkillTranslator()
         adapter = WindowsSendInputAdapter(
             window,
             Win32SendInputBackend(),
@@ -91,10 +92,16 @@ def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str]
             allow_clicks=True,
             allow_keyboard=True,
         )
-        executor = InputActionExecutor(adapter, observe_state=observe_state)
+        executor = InputActionExecutor(adapter, translator=translator, observe_state=observe_state)
         verifier = SemanticStateVerifier(observe_state)
     watchdog = Watchdog(store)
-    actions = ActionEngine(settings, store, executor, verifier)
+    actions = ActionEngine(
+        settings,
+        store,
+        executor,
+        verifier,
+        preflight=translator.validate_live if settings.execution_mode != "dry-run" else None,
+    )
     governor = Governor(store, client, actions, watchdog, model=settings.deepseek_reasoning_model, state_aggregator=aggregator)
     loop = GovernorLoop(source, governor, store, watchdog)
     return GovernorRuntime(loop=loop, source=source, governor=governor)

@@ -28,8 +28,8 @@ from ai_governor.storage import SQLiteStore
 from ai_governor.state import StateAggregator
 from ai_governor.supervisor import GovernorSupervisor
 from ai_governor.watchdog import Watchdog
-from ai_governor.window import SteamWindowAdapter, WindowNotFound
-from ai_governor.skills import InputActionExecutor, SkillTranslationError, SkillTranslator
+from ai_governor.window import SteamWindowAdapter, WindowNotFound, WindowNotForeground
+from ai_governor.skills import InputActionExecutor, PreActionValidationError, SkillTranslationError, SkillTranslator
 from ai_governor.verification import ScreenshotVerifier, SemanticStateVerifier
 
 
@@ -141,6 +141,41 @@ def test_skill_translator_accepts_explicit_input_commands() -> None:
 def test_skill_translator_rejects_unknown_game_skill() -> None:
     with pytest.raises(SkillTranslationError, match="unsupported game skill"):
         SkillTranslator().translate(PlannedAction("build_farm", {"x": 1, "y": 2}))
+
+
+def test_live_skill_preflight_rejects_missing_semantic_predicate_before_translation() -> None:
+    with pytest.raises(PreActionValidationError, match="expected_state or changed_fields"):
+        SkillTranslator().validate_live(PlannedAction("OPEN_BUILD_MENU", {"commands": [{"kind": "key_down", "key": 27}]}))
+
+
+def test_live_skill_preflight_translates_before_input() -> None:
+    action = PlannedAction(
+        "OPEN_BUILD_MENU",
+        {
+            "commands": [{"kind": "key_down", "key": 27}],
+            "changed_fields": ["menu"],
+        },
+    )
+    SkillTranslator().validate_live(action)
+
+
+def test_action_engine_blocks_live_action_before_executor_on_bad_contract(store: SQLiteStore, tmp_path: Path) -> None:
+    class SemanticVerifier:
+        semantic = True
+
+        def verify(self, action, execution_result):
+            raise AssertionError("post-action verification must not run")
+
+    class ExplodingExecutor:
+        def execute(self, action):
+            raise AssertionError("executor must not receive an invalid live action")
+
+    settings = Settings(db_path=tmp_path / "preflight.db", execution_mode="live", allow_live_input=True)
+    store.set_runtime("live_armed", True)
+    engine = ActionEngine(settings, store, ExplodingExecutor(), SemanticVerifier(), SkillTranslator().validate_live)
+    result = engine.execute_plan(ActionPlan("preflight", [PlannedAction("OPEN_BUILD_MENU", {"commands": []})]))
+    assert result[0]["status"] == "blocked"
+    assert "pre-action validation failed" in result[0]["reason"]
 
 
 def test_input_action_executor_captures_before_and_after_state() -> None:
@@ -511,6 +546,7 @@ class FakeWindowBackend:
     def __init__(self, minimized: bool = False) -> None:
         self.minimized = minimized
         self.restored = False
+        self.foreground = 99
 
     def find_window(self, title: str):
         return 99
@@ -529,6 +565,9 @@ class FakeWindowBackend:
 
     def client_to_screen(self, hwnd: int, x: int, y: int):
         return (100 + x, 50 + y)
+
+    def foreground_window(self):
+        return self.foreground
 
 
 def test_window_adapter_returns_client_geometry_and_normalized_point() -> None:
@@ -584,6 +623,30 @@ def test_dry_run_input_uses_window_relative_coordinates() -> None:
 def test_live_input_is_disabled_by_default() -> None:
     adapter = WindowsSendInputAdapter(SteamWindowAdapter("满庭芳：宋上繁华", FakeWindowBackend()), object())
     with pytest.raises(InputDisabled, match="disabled"):
+        adapter.execute(InputCommand("click", 0.5, 0.5))
+
+
+def test_live_input_refuses_non_foreground_window() -> None:
+    class Backend:
+        def move_absolute(self, x, y):
+            raise AssertionError("input must not be emitted")
+
+        def mouse_click(self):
+            raise AssertionError("input must not be emitted")
+
+        def key(self, virtual_key, down):
+            raise AssertionError("input must not be emitted")
+
+    window_backend = FakeWindowBackend()
+    window_backend.foreground = 101
+    adapter = WindowsSendInputAdapter(
+        SteamWindowAdapter("满庭芳：宋上繁华", window_backend),
+        Backend(),
+        enabled=True,
+        allow_clicks=True,
+        allow_keyboard=True,
+    )
+    with pytest.raises(WindowNotForeground, match="not foreground"):
         adapter.execute(InputCommand("click", 0.5, 0.5))
 
 

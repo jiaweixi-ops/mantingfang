@@ -8,6 +8,7 @@ from .actions import ActionEngine
 from .models import ActionPlan, Observation
 from .storage import SQLiteStore
 from .state import CanonicalGameState, StateAggregator
+from .skills import GAME_SKILLS
 from .watchdog import Watchdog
 
 
@@ -61,6 +62,11 @@ class Governor:
                     "你是《满庭芳：宋上繁华》的唯一 DeepSeek 城市治理大脑。"
                     "只根据已观测事实和当前目标生成 JSON action plan；不要编造看不到的状态。"
                     "高风险剧情、战争、不可逆政策使用 critical，程序会阻止它们。"
+                    "可用游戏 Skill 只有："
+                    f"{', '.join(GAME_SKILLS)}。"
+                    "动作必须使用 action_type=Skill 名称，并携带由视觉 UI 边界框校准出的 commands；"
+                    "不要猜测坐标。每个 live 动作必须同时提供非空 expected_state 或 changed_fields，"
+                    "否则会在发送鼠标键盘前被阻止。"
                 ),
             },
             {

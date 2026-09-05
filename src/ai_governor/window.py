@@ -14,6 +14,10 @@ class WindowNotFound(WindowError):
     pass
 
 
+class WindowNotForeground(WindowError):
+    pass
+
+
 class WindowBackend(Protocol):
     def find_window(self, title: str) -> int | None: ...
     def is_window(self, hwnd: int) -> bool: ...
@@ -21,6 +25,7 @@ class WindowBackend(Protocol):
     def restore(self, hwnd: int) -> None: ...
     def client_rect(self, hwnd: int) -> tuple[int, int, int, int]: ...
     def client_to_screen(self, hwnd: int, x: int, y: int) -> tuple[int, int]: ...
+    def foreground_window(self) -> int | None: ...
 
 
 @dataclass(frozen=True)
@@ -71,6 +76,8 @@ class Win32WindowBackend:
         self.user32.GetClientRect.restype = ctypes.c_int
         self.user32.ClientToScreen.argtypes = [ctypes.c_void_p, ctypes.POINTER(self._Point)]
         self.user32.ClientToScreen.restype = ctypes.c_int
+        self.user32.GetForegroundWindow.argtypes = []
+        self.user32.GetForegroundWindow.restype = ctypes.c_void_p
 
     def find_window(self, title: str) -> int | None:
         hwnd = self.user32.FindWindowW(None, title)
@@ -97,6 +104,10 @@ class Win32WindowBackend:
             raise WindowError(f"ClientToScreen failed: {ctypes.get_last_error()}")
         return point.x, point.y
 
+    def foreground_window(self) -> int | None:
+        hwnd = self.user32.GetForegroundWindow()
+        return int(hwnd) if hwnd else None
+
 
 @dataclass
 class SteamWindowAdapter:
@@ -117,3 +128,12 @@ class SteamWindowAdapter:
             raise WindowError(f"game client area is invalid: {width}x{height}")
         screen_left, screen_top = self.backend.client_to_screen(hwnd, 0, 0)
         return WindowInfo(hwnd, self.title, width, height, screen_left, screen_top, minimized)
+
+    def require_foreground(self, info: WindowInfo | None = None) -> WindowInfo:
+        info = info or self.locate()
+        foreground = self.backend.foreground_window()
+        if foreground != info.hwnd:
+            raise WindowNotForeground(
+                f"refusing input: game window is not foreground (game={info.hwnd}, foreground={foreground})"
+            )
+        return info

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from .config import Settings
 from .models import ActionPlan, ActionStatus, PlannedAction, RiskLevel
+from .skills import PreActionValidationError, validate_semantic_contract
 from .storage import SQLiteStore
 
 
@@ -59,6 +60,7 @@ class ActionEngine:
     store: SQLiteStore
     executor: ActionExecutor
     verifier: ActionVerifier | None = None
+    preflight: Callable[[PlannedAction], None] | None = None
 
     def __post_init__(self) -> None:
         self.gate = SafetyGate(self.settings, self.store)
@@ -77,6 +79,12 @@ class ActionEngine:
                 if self.verifier is None or not getattr(self.verifier, "semantic", False):
                     allowed = False
                     reason = "live execution requires semantic post-action verification"
+                else:
+                    try:
+                        (self.preflight or validate_semantic_contract)(effective_action)
+                    except (PreActionValidationError, ValueError) as exc:
+                        allowed = False
+                        reason = f"pre-action validation failed: {exc}"
             if not allowed:
                 self.store.record_action(effective_action, ActionStatus.BLOCKED, {"reason": reason}, idempotency_key=scoped_key)
                 results.append({"id": action.id, "status": ActionStatus.BLOCKED.value, "reason": reason})
