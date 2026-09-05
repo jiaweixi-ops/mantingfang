@@ -17,7 +17,7 @@ Build the first usable, safe local foundation for the Steam AI Governor describe
 - [x] Watchdog/recovery state prevents unsafe continuation after stale or uncertain execution.
 - [x] Automated tests cover the safety-critical paths and pass locally.
 - [x] A Windows read-only memory sampler supports configured pointer paths without any memory-write API.
-- [ ] Git history contains the implementation; push is attempted only after a real remote is identified.
+- [x] Git history contains the implementation; the implementation and delivery record are pushed to the user-provided remote.
 
 ## Phases
 
@@ -29,7 +29,7 @@ Build the first usable, safe local foundation for the Steam AI Governor describe
 | 3. Safe action engine and watchdog | complete | Risk gates, dry-run executor, uncertainty halt, recovery |
 | 4. Feishu gateway and reporting | complete | Commands, reports, major-event notifications, adapter boundary |
 | 4b. Read-only memory diagnostics | complete | Windows process reader, configured pointer profile, diagnostic CLI |
-| 5. Verification and delivery | in_progress | Tests, docs, git commit, remote/push resolution |
+| 5. Verification and delivery | complete | Tests, docs, Git commit, remote push, and post-push verification |
 
 ## Decisions
 
@@ -69,4 +69,4 @@ Build the first usable, safe local foundation for the Steam AI Governor describe
 
 ## Next action
 
-Commit the staged implementation and push `main` to the configured `origin`; then verify the remote branch and working tree.
+Keep the local worktree clean and use the pushed foundation as the baseline for game-specific profile calibration.
