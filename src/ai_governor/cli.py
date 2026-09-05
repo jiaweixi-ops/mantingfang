@@ -9,6 +9,7 @@ from .config import Settings
 from .capture import CaptureError, ClientAreaCapture, Win32ClientCaptureBackend
 from .deepseek import DeepSeekConfigurationError
 from .feishu import CommandRouter
+from .feishu_http import FeishuApiClient, FeishuCallbackServer, FeishuEventHandler
 from .memory import (
     MemoryAccessError,
     MemoryConfigurationError,
@@ -37,6 +38,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("resume")
     sub.add_parser("arm-live", help="arm live input after explicit configuration")
     sub.add_parser("disarm-live", help="disarm live input immediately")
+    server = sub.add_parser("feishu-server", help="serve Feishu callback events locally")
+    server.add_argument("--host", default="127.0.0.1")
+    server.add_argument("--port", type=int, default=8787)
     run = sub.add_parser("run", help="run the DeepSeek Governor loop")
     run.add_argument("--max-cycles", type=int, help="stop after this many cycles; omit for continuous run")
     run.add_argument("--interval", type=float, default=10.0, help="seconds between cycles")
@@ -130,6 +134,21 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "disarm-live":
             store.set_runtime("live_armed", False)
             print("live input disarmed")
+            return 0
+        if args.command == "feishu-server":
+            if not settings.feishu_app_id or not settings.feishu_app_secret:
+                print("ERROR: FEISHU_APP_ID and FEISHU_APP_SECRET are required", file=sys.stderr)
+                return 2
+            router = CommandRouter(store, ReportService(store), Watchdog(store))
+            client = FeishuApiClient(settings.feishu_app_id, settings.feishu_app_secret, settings.feishu_api_base)
+            handler = FeishuEventHandler(router, client, settings.feishu_verification_token, settings.feishu_encrypt_key)
+            try:
+                server = FeishuCallbackServer(handler, args.host, args.port)
+                print(json.dumps({"listening": server.address}, ensure_ascii=False))
+                server.serve_forever()
+            except (OSError, ValueError) as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
             return 0
         if args.command == "run":
             if args.interval < 0:

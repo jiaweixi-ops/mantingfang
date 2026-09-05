@@ -93,4 +93,4 @@ DeepSeek 客户端对网络超时、408、429 和 5xx 使用指数退避重试�
 
 `CompositeObservationSource` 可以在同一轮合并内存和多区域视觉观测；`InputActionExecutor` 只接受白名单输入技能，并可在动作前后采集状态交给 `SemanticStateVerifier`。截图可用性验证不再被视为 live 动作成功的充分条件。
 
-飞书正式接入使用 `FeishuApiClient` + `FeishuHttpTransport`：凭据来自环境变量，token 只缓存在进程内，事件处理支持 URL challenge、文本命令和可选签名校验。测试默认使用 fake HTTP，不会发送真实消息。
+飞书正式接入使用 `FeishuApiClient` + `FeishuHttpTransport`：凭据来自环境变量，token 只缓存在进程内，事件处理支持 URL challenge、文本命令、签名校验和 Encrypt Key 解密。`feishu-server` 提供本机常驻 Callback Server，默认监听 `127.0.0.1:8787`；需要公网回调时必须由用户自行配置安全的反向代理或隧道。加密回调需要安装可选依赖 `cryptography`。

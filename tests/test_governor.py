@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import base64
+import hashlib
 import struct
 from pathlib import Path
 
@@ -13,7 +15,7 @@ from ai_governor.loop import CompositeObservationSource, GovernorLoop
 from ai_governor.config import Settings
 from ai_governor.deepseek import DeepSeekClient, DeepSeekRequestError
 from ai_governor.feishu import CommandRouter, NullFeishuTransport, FeishuGateway
-from ai_governor.feishu_http import FeishuApiClient, FeishuEventHandler, FeishuHttpTransport
+from ai_governor.feishu_http import FeishuApiClient, FeishuEventHandler, FeishuHttpTransport, FeishuPayloadCipher
 from ai_governor.governor import Governor
 from ai_governor.models import ActionPlan, Goal, MajorEvent, Observation, PlannedAction, RiskLevel
 from ai_governor.memory import MemoryAccessError, MemoryProfile, MemorySampler
@@ -222,6 +224,25 @@ def test_feishu_event_handler_handles_url_challenge_and_text(store: SQLiteStore)
     })
     assert result["ok"] is True
     assert len(http.requests) == 2
+
+
+def test_feishu_event_handler_decrypts_encrypted_challenge(store: SQLiteStore) -> None:
+    try:
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    except ImportError:
+        pytest.skip("optional cryptography package is unavailable or has a broken native binding")
+    key_text = "encrypt-key"
+    key = hashlib.sha256(key_text.encode()).digest()
+    plain = json.dumps({"type": "url_verification", "token": "verify", "challenge": "encrypted"}).encode()
+    padding = 16 - (len(plain) % 16)
+    encryptor = Cipher(algorithms.AES(key), modes.CBC(key[:16])).encryptor()
+    encoded = base64.b64encode(encryptor.update(plain + bytes([padding]) * padding) + encryptor.finalize()).decode()
+    http = FakeFeishuHttp()
+    client = FeishuApiClient("app", "secret", http=http)
+    router = CommandRouter(store, ReportService(store), Watchdog(store))
+    handler = FeishuEventHandler(router, client, verification_token="verify", encrypt_key=key_text)
+    assert handler.handle({"encrypt": encoded}) == {"challenge": "encrypted"}
+    assert FeishuPayloadCipher.decrypt(encoded, key_text)["challenge"] == "encrypted"
 
 
 def test_safety_gate_blocks_critical_and_pause(store: SQLiteStore, tmp_path: Path) -> None:
