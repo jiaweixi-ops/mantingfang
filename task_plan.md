@@ -129,4 +129,6 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Add CI for the source-level safety and integration checks.
 - [x] Move major-event pause and pending-decision persistence into a runtime coordinator independent of Feishu availability.
 - [x] Enforce semantic Vision fields for `build_menu` and `dialog` regions, with regression tests.
+- [x] Add a Windows floating assistant window that follows the game, toggles with global `Home`, and exposes saved DeepSeek settings.
+- [x] Update the desktop shortcut to launch the floating assistant safely.
 - [ ] Add a separately gated real Steam E2E harness; real E2E remains unverified until the game is running with calibrated UI/profile data.

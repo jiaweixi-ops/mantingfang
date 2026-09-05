@@ -1,8 +1,65 @@
 from __future__ import annotations
 
 import os
+import json
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
+
+
+PERSISTED_SETTINGS_KEYS = (
+    "deepseek_api_base",
+    "deepseek_api_key",
+    "deepseek_vision_model",
+    "deepseek_reasoning_model",
+)
+
+
+def user_settings_path() -> Path:
+    """Return the per-user settings path; secrets never live in the repository."""
+    configured = os.getenv("GOVERNOR_SETTINGS_PATH")
+    if configured:
+        return Path(configured)
+    local_app_data = os.getenv("LOCALAPPDATA")
+    base = Path(local_app_data) if local_app_data else Path.home() / ".local" / "share"
+    return base / "MantingfangAIGovernor" / "settings.json"
+
+
+def load_persisted_settings(path: Path | None = None) -> dict[str, str]:
+    settings_path = path or user_settings_path()
+    try:
+        raw = json.loads(settings_path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        key: value.strip()
+        for key in PERSISTED_SETTINGS_KEYS
+        if isinstance(value := raw.get(key), str) and value.strip()
+    }
+
+
+def save_persisted_settings(values: dict[str, Any], path: Path | None = None) -> Path:
+    """Atomically save only user-facing DeepSeek settings outside the repo."""
+    settings_path = path or user_settings_path()
+    payload: dict[str, str] = {}
+    for key in PERSISTED_SETTINGS_KEYS:
+        value = values.get(key)
+        if isinstance(value, str) and value.strip():
+            payload[key] = value.strip()
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary_name = tempfile.mkstemp(prefix="settings-", suffix=".tmp", dir=settings_path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        os.replace(temporary_name, settings_path)
+    finally:
+        if os.path.exists(temporary_name):
+            os.unlink(temporary_name)
+    return settings_path
 
 
 def _bool_env(name: str, default: bool = False) -> bool:
@@ -33,6 +90,11 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
+        persisted = load_persisted_settings()
+
+        def configured(name: str, key: str, default: str | None = None) -> str | None:
+            return os.getenv(name) or persisted.get(key) or default
+
         mode = os.getenv("GOVERNOR_EXECUTION_MODE", "dry-run").strip().lower()
         if mode not in {"dry-run", "live"}:
             raise ValueError("GOVERNOR_EXECUTION_MODE must be 'dry-run' or 'live'")
@@ -43,10 +105,10 @@ class Settings:
             allow_critical_actions=_bool_env("GOVERNOR_ALLOW_CRITICAL_ACTIONS"),
             allow_live_input=_bool_env("GOVERNOR_ALLOW_LIVE_INPUT"),
             game_window_title=os.getenv("GOVERNOR_GAME_WINDOW_TITLE", cls.game_window_title),
-            deepseek_api_base=os.getenv("DEEPSEEK_API_BASE", cls.deepseek_api_base).rstrip("/"),
-            deepseek_api_key=os.getenv("DEEPSEEK_API_KEY") or None,
-            deepseek_vision_model=os.getenv("DEEPSEEK_VISION_MODEL") or None,
-            deepseek_reasoning_model=os.getenv("DEEPSEEK_REASONING_MODEL") or None,
+            deepseek_api_base=(configured("DEEPSEEK_API_BASE", "deepseek_api_base", cls.deepseek_api_base) or cls.deepseek_api_base).rstrip("/"),
+            deepseek_api_key=configured("DEEPSEEK_API_KEY", "deepseek_api_key"),
+            deepseek_vision_model=configured("DEEPSEEK_VISION_MODEL", "deepseek_vision_model"),
+            deepseek_reasoning_model=configured("DEEPSEEK_REASONING_MODEL", "deepseek_reasoning_model"),
             feishu_app_id=os.getenv("FEISHU_APP_ID") or None,
             feishu_app_secret=os.getenv("FEISHU_APP_SECRET") or None,
             feishu_verification_token=os.getenv("FEISHU_VERIFICATION_TOKEN") or None,

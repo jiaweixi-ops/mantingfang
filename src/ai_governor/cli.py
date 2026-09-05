@@ -36,6 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("status")
     sub.add_parser("report")
     sub.add_parser("goals")
+    sub.add_parser("overlay", help="open the floating Windows assistant window")
     sub.add_parser("pause")
     sub.add_parser("resume")
     sub.add_parser("arm-live", help="arm live input after explicit configuration")
@@ -77,6 +78,9 @@ def main(argv: list[str] | None = None) -> int:
         from dataclasses import replace
         settings = replace(settings, db_path=Path(args.db))
     settings.ensure_directories()
+    if args.command == "overlay":
+        from .overlay import run_overlay
+        return run_overlay()
     if args.command == "memory-processes":
         try:
             processes = WindowsProcessEnumerator().list()

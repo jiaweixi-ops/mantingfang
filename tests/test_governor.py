@@ -15,7 +15,8 @@ from ai_governor.actions import ActionEngine, DryRunExecutor
 from ai_governor.capture import CapturedFrame, ClientAreaCapture, encode_rgba_png
 from ai_governor.input import DryRunInputAdapter, InputCommand, InputDisabled, WindowsSendInputAdapter
 from ai_governor.loop import CompositeObservationSource, GovernorLoop
-from ai_governor.config import Settings
+from ai_governor.config import Settings, load_persisted_settings, save_persisted_settings
+from ai_governor.cli import build_parser
 from ai_governor.deepseek import DeepSeekClient, DeepSeekRequestError
 from ai_governor.e2e import BuildMenuE2EHarness, E2EConfigurationError
 from ai_governor.events import MajorEventCoordinator, MajorEventDetector
@@ -74,6 +75,38 @@ def test_deepseek_client_records_usage_without_network() -> None:
     client._record_usage({"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}, "model", "strategic")
     assert client.last_usage.to_dict() == {"kind": "strategic", "model": "model", "prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}
     assert callback == [client.last_usage.to_dict()]
+
+
+def test_persisted_deepseek_settings_round_trip_and_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path = tmp_path / "settings.json"
+    save_persisted_settings(
+        {
+            "deepseek_api_base": "https://example.test/v1",
+            "deepseek_api_key": "secret",
+            "deepseek_vision_model": "vision-model",
+            "deepseek_reasoning_model": "reasoning-model",
+            "ignored": "not persisted",
+        },
+        path,
+    )
+    assert load_persisted_settings(path) == {
+        "deepseek_api_base": "https://example.test/v1",
+        "deepseek_api_key": "secret",
+        "deepseek_vision_model": "vision-model",
+        "deepseek_reasoning_model": "reasoning-model",
+    }
+    monkeypatch.setenv("GOVERNOR_SETTINGS_PATH", str(path))
+    for name in ("DEEPSEEK_API_BASE", "DEEPSEEK_API_KEY", "DEEPSEEK_VISION_MODEL", "DEEPSEEK_REASONING_MODEL"):
+        monkeypatch.delenv(name, raising=False)
+    settings = Settings.from_env()
+    assert settings.deepseek_reasoning_model == "reasoning-model"
+    monkeypatch.setenv("DEEPSEEK_REASONING_MODEL", "environment-model")
+    assert Settings.from_env().deepseek_reasoning_model == "environment-model"
+
+
+def test_cli_exposes_overlay_command() -> None:
+    args = build_parser().parse_args(["overlay"])
+    assert args.command == "overlay"
 
 
 def test_deepseek_client_rejects_negative_retry_count() -> None:

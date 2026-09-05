@@ -13,9 +13,18 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m ai_governor.cli init
 .\.venv\Scripts\python.exe -m ai_governor.cli status
 .\.venv\Scripts\python.exe -m ai_governor.cli command 获取日报
+.\.venv\Scripts\python.exe -m ai_governor.cli overlay
 ```
 
 复制 `.env.example` 为 `.env` 后，需要由启动环境注入变量；程序不会自动读取 `.env` 文件，避免把秘密加载行为藏在代码里。
+
+## Windows 浮动辅助窗口
+
+运行 `overlay` 会打开一个始终置顶、跟随《满庭芳》客户区移动的辅助窗口。按 `Home` 可以全局显示或隐藏窗口，即使当前焦点在游戏内也有效。
+
+点击“设置 DeepSeek”后可以填写并保存 API Base、API Key、视觉模型和推理模型。配置保存在当前 Windows 用户的 `%LOCALAPPDATA%\MantingfangAIGovernor\settings.json`，不会写入仓库或 Git；环境变量仍然可以覆盖保存值。
+
+浮窗中的“启动 AI 托管”默认使用 `dry-run`，不会发送真实鼠标键盘输入。托管子进程日志保存在 `data\overlay.log`。
 
 ## 当前边界
 

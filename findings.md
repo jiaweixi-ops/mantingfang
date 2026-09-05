@@ -32,6 +32,8 @@
 - The E2E harness is intentionally separate from the normal `run` loop. It refuses dry-run, missing arming, missing semantic verification, or absent explicit confirmation, and stops at the first failed open/close action; no live E2E was run in this environment.
 - Latest acceptance identified a safety gap: when Feishu credentials are absent, runtime event handling recorded events but did not pause on `requires_decision`; pause and pending-decision persistence must belong to a runtime event coordinator, while Feishu remains an optional notifier.
 - Build-menu/dialog E2E depends on semantic fields that generic Vision output did not previously require. The perception boundary must validate `build_menu_open`/`dialog_open`, `current_screen`, and dialog `options` before observations reach strategy or live verification.
+- The existing desktop shortcut launched `cli run` directly, so it required DeepSeek model environment variables and had no settings UI. The overlay should own the user-facing configuration flow and persist only local settings outside the repository.
+- A standard-library Tkinter overlay can use Win32 `RegisterHotKey(Home)` for a global toggle and `SteamWindowAdapter`/`Win32WindowBackend` to follow the game client area; it must remain topmost and keep live input opt-in.
 
 - Use Python 3.11+ with a standard-library-first core to keep local/offline setup portable.
 - Use SQLite for durable local state and an append-only audit trail.
