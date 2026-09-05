@@ -11,6 +11,7 @@ from ai_governor.capture import ClientAreaCapture, encode_rgba_png
 from ai_governor.input import DryRunInputAdapter, InputCommand, InputDisabled, WindowsSendInputAdapter
 from ai_governor.loop import CompositeObservationSource, GovernorLoop
 from ai_governor.config import Settings
+from ai_governor.deepseek import DeepSeekClient, DeepSeekRequestError
 from ai_governor.feishu import CommandRouter, NullFeishuTransport, FeishuGateway
 from ai_governor.feishu_http import FeishuApiClient, FeishuEventHandler, FeishuHttpTransport
 from ai_governor.governor import Governor
@@ -39,6 +40,24 @@ def test_store_round_trip_and_report(store: SQLiteStore) -> None:
     report = ReportService(store).daily_report()
     assert "826" in report
     assert "人口达到 1000" in report
+
+
+def test_store_records_token_usage(store: SQLiteStore) -> None:
+    store.record_token_usage({"kind": "vision", "model": "deepseek-vl", "prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14})
+    assert store.token_usage_totals() == {"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14}
+
+
+def test_deepseek_client_records_usage_without_network() -> None:
+    callback = []
+    client = DeepSeekClient("https://example.invalid", "key", "model", usage_callback=callback.append)
+    client._record_usage({"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}, "model", "strategic")
+    assert client.last_usage.to_dict() == {"kind": "strategic", "model": "model", "prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}
+    assert callback == [client.last_usage.to_dict()]
+
+
+def test_deepseek_client_rejects_negative_retry_count() -> None:
+    with pytest.raises(ValueError, match="max_retries"):
+        DeepSeekClient("https://example.invalid", "key", "model", max_retries=-1)
 
 
 def test_action_engine_is_dry_run_and_idempotent(store: SQLiteStore, tmp_path: Path) -> None:

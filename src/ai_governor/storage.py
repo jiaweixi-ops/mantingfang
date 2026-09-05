@@ -50,6 +50,12 @@ class SQLiteStore:
             CREATE TABLE IF NOT EXISTS runtime_state (
                 key TEXT PRIMARY KEY, value_json TEXT NOT NULL, updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS token_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, recorded_at TEXT NOT NULL,
+                kind TEXT NOT NULL, model TEXT NOT NULL,
+                prompt_tokens INTEGER NOT NULL, completion_tokens INTEGER NOT NULL,
+                total_tokens INTEGER NOT NULL
+            );
             """
         )
         self._conn.commit()
@@ -77,6 +83,23 @@ class SQLiteStore:
         )
         self.audit("observation", "observation recorded", {"id": observation.id, "region": observation.region})
         self._commit()
+
+    def record_token_usage(self, usage: dict[str, Any]) -> None:
+        self._conn.execute(
+            "INSERT INTO token_usage(recorded_at, kind, model, prompt_tokens, completion_tokens, total_tokens) VALUES(?,?,?,?,?,?)",
+            (utc_now(), str(usage.get("kind", "chat")), str(usage.get("model", "unknown")),
+             int(usage.get("prompt_tokens", 0)), int(usage.get("completion_tokens", 0)), int(usage.get("total_tokens", 0))),
+        )
+        self.audit("token_usage", "DeepSeek usage recorded", usage)
+        self._commit()
+
+    def token_usage_totals(self) -> dict[str, int]:
+        row = self._conn.execute(
+            "SELECT COALESCE(SUM(prompt_tokens),0) AS prompt_tokens, "
+            "COALESCE(SUM(completion_tokens),0) AS completion_tokens, "
+            "COALESCE(SUM(total_tokens),0) AS total_tokens FROM token_usage"
+        ).fetchone()
+        return {key: int(row[key]) for key in ("prompt_tokens", "completion_tokens", "total_tokens")}
 
     def latest_observation(self) -> dict[str, Any] | None:
         row = self._conn.execute("SELECT * FROM observations ORDER BY observed_at DESC LIMIT 1").fetchone()

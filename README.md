@@ -42,6 +42,7 @@ src/ai_governor/
   capture.py       Windows 客户区截图与标准 PNG 编码
   input.py         策略门控的 dry-run/SendInput 适配器
   skills.py        PlannedAction 到输入技能的受限转换器
+  skills.py        PlannedAction 到输入技能的受限转换器
   verification.py  动作后的窗口/截图验证
   loop.py           变化检测、心跳和恢复态长运行循环
   models.py        状态、目标、动作、事件模型
@@ -83,6 +84,10 @@ Governor 发给 DeepSeek Chat Completions 的用户上下文会序列化为 UTF-
 动作幂等默认按 `plan_id + action_type + payload` 作用域计算，因此周期性资源检查可以在新计划中再次执行；只有显式提供 `idempotency_key` 的不可重复动作才跨计划永久去重。
 
 `GovernorLoop` 每轮读取观测，按稳定数据指纹跳过无变化画面，调用 Governor 处理变化，并在观测源连续失败达到阈值时暂停并进入恢复态。它是编排组件，不会自行启动游戏或启用 live 输入。
+
+`CompositeObservationSource` 可以在同一轮合并内存和多区域视觉观测；`InputActionExecutor` 只接受白名单输入技能，并可在动作前后采集状态交给 `SemanticStateVerifier`。截图可用性验证不再被视为 live 动作成功的充分条件。
+
+DeepSeek 客户端对网络超时、408、429 和 5xx 使用指数退避重试，并将返回的 prompt/completion/total tokens 记录到 SQLite；失败次数耗尽后仍会明确进入恢复路径。
 
 `CompositeObservationSource` 可以在同一轮合并内存和多区域视觉观测；`InputActionExecutor` 只接受白名单输入技能，并可在动作前后采集状态交给 `SemanticStateVerifier`。截图可用性验证不再被视为 live 动作成功的充分条件。
 
