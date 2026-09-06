@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using UnityEngine;
@@ -23,12 +24,31 @@ internal sealed class ReadOnlyStateReader
         if (baseData is null || sceneData is null)
             return Unknown("BaseData_or_SceneData_not_verified");
 
-        object? resources = GetMember(baseData, "ShowRes");
+        object? centerStoreData = GetMember(baseData, "CenterStoreData");
+        object? resources = centerStoreData is null ? null : GetMember(centerStoreData, "Res");
         object? villagers = GetMember(baseData, "Villagers");
         object? buildings = GetMember(sceneData, "Buildings");
         object? sites = GetMember(sceneData, "Sites");
         if (resources is null || villagers is null || buildings is null || sites is null)
             return Unknown("required_state_members_not_verified");
+
+        object? cityName = GetMember(baseData, "CityName");
+        object? year = GetMember(baseData, "Year");
+        object? month = GetMember(baseData, "Month");
+        object? buildMenuOpen = ReadBuildMenuOpen();
+        if (cityName is not string city || string.IsNullOrWhiteSpace(city)
+            || !TryNonNegativeInteger(year, out long yearValue)
+            || !TryNonNegativeInteger(month, out long monthValue)
+            || !TryNonNegativeInteger(villagers is null ? null : Count(villagers), out long populationValue)
+            || !TryNonNegativeInteger(buildings is null ? null : Count(buildings), out long buildingsValue)
+            || !TryNonNegativeInteger(sites is null ? null : Count(sites), out long sitesValue)
+            || !TryReadResource(resources, 2, out object gold)
+            || !TryReadResource(resources, 3, out object rice)
+            || !TryReadResource(resources, 4, out object vegetable)
+            || !TryReadResource(resources, 8, out object wood)
+            || !TryReadResource(resources, 9, out object stone)
+            || buildMenuOpen is not bool menuOpen)
+            return Unknown("required_state_values_not_verified");
 
         return new Dictionary<string, object?>
         {
@@ -37,40 +57,68 @@ internal sealed class ReadOnlyStateReader
             ["game_pid"] = Process.GetCurrentProcess().Id,
             ["game_version"] = Application.version,
             ["observed_at"] = DateTime.UtcNow.ToString("O"),
-            ["city_name"] = GetMember(baseData, "CityName"),
-            ["year"] = GetMember(baseData, "Year"),
-            ["month"] = GetMember(baseData, "Month"),
-            ["gold"] = FindResource(resources, 2),
-            ["population"] = Count(villagers),
-            ["resources"] = ReadResources(resources),
-            ["buildings_count"] = Count(buildings),
-            ["sites_count"] = Count(sites),
-            ["build_menu_open"] = ReadBuildMenuOpen(),
+            ["city_name"] = city,
+            ["year"] = yearValue,
+            ["month"] = monthValue,
+            ["gold"] = gold,
+            ["population"] = populationValue,
+            ["resources"] = new Dictionary<string, object>
+            {
+                ["rice"] = rice,
+                ["vegetable"] = vegetable,
+                ["wood"] = wood,
+                ["stone"] = stone,
+            },
+            ["buildings_count"] = buildingsValue,
+            ["sites_count"] = sitesValue,
+            ["build_menu_open"] = menuOpen,
         };
     }
 
-    private static Dictionary<string, object?> ReadResources(object resources)
+    private static bool TryReadResource(object resources, int wantedId, out object amount)
     {
-        var result = new Dictionary<string, object?>();
         foreach (object item in Enumerate(resources))
         {
             object? id = GetMember(item, "Id") ?? GetMember(item, "ResId");
-            object? amount = GetMember(item, "Num") ?? GetMember(item, "Count") ?? GetMember(item, "Value");
-            if (id is null || amount is null) continue;
-            result[$"res_{id}"] = amount;
+            if (id is null) continue;
+            try
+            {
+                if (Convert.ToInt32(id, CultureInfo.InvariantCulture) != wantedId) continue;
+            }
+            catch { continue; }
+            object? raw = GetMember(item, "Num") ?? GetMember(item, "Count") ?? GetMember(item, "Value");
+            if (TryNonNegativeNumber(raw, out amount)) return true;
         }
-        return result;
+        amount = 0L;
+        return false;
     }
 
-    private static object? FindResource(object resources, int wantedId)
+    private static bool TryNonNegativeInteger(object? value, out long normalized)
     {
-        foreach (object item in Enumerate(resources))
+        normalized = 0;
+        if (value is null) return false;
+        try
         {
-            object? id = GetMember(item, "Id") ?? GetMember(item, "ResId");
-            if (id is not null && Convert.ToInt32(id) == wantedId)
-                return GetMember(item, "Num") ?? GetMember(item, "Count") ?? GetMember(item, "Value");
+            decimal number = Convert.ToDecimal(value, CultureInfo.InvariantCulture);
+            if (number < 0 || decimal.Truncate(number) != number) return false;
+            normalized = (long)number;
+            return true;
         }
-        return null;
+        catch { return false; }
+    }
+
+    private static bool TryNonNegativeNumber(object? value, out object normalized)
+    {
+        normalized = 0L;
+        if (value is null) return false;
+        try
+        {
+            decimal number = Convert.ToDecimal(value, CultureInfo.InvariantCulture);
+            if (number < 0) return false;
+            normalized = decimal.Truncate(number) == number ? (object)(long)number : (double)number;
+            return true;
+        }
+        catch { return false; }
     }
 
     private static object? ReadBuildMenuOpen()
@@ -81,7 +129,7 @@ internal sealed class ReadOnlyStateReader
         return GetMember(instance, "IsOpen") ?? GetMember(instance, "isOpen") ?? GetMember(instance, "Open");
     }
 
-    private static object Unknown(string reason) => new Dictionary<string, object?>
+    internal static object Unknown(string reason) => new Dictionary<string, object?>
     {
         ["source"] = "runtime_bridge", ["status"] = "UNKNOWN", ["reason"] = reason,
         ["game_pid"] = Process.GetCurrentProcess().Id, ["game_version"] = Application.version,

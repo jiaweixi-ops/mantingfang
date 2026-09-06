@@ -125,6 +125,13 @@ def test_persisted_qwen_settings_round_trip_and_env_override(tmp_path: Path, mon
     assert Settings.from_env().qwen_reasoning_model == "environment-model"
 
 
+def test_runtime_telemetry_requires_game_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GOVERNOR_RUNTIME_TELEMETRY", "true")
+    monkeypatch.delenv("GOVERNOR_RUNTIME_GAME_VERSION", raising=False)
+    with pytest.raises(ValueError, match="GOVERNOR_RUNTIME_GAME_VERSION"):
+        Settings.from_env()
+
+
 def test_cli_exposes_overlay_command() -> None:
     args = build_parser().parse_args(["overlay"])
     assert args.command == "overlay"
@@ -376,6 +383,50 @@ def test_input_action_executor_captures_before_and_after_state() -> None:
     assert result["simulated"] is True
     assert result["before_state"] == {"menu": "closed"}
     assert result["after_state"] == {"menu": "open"}
+
+
+def test_input_action_executor_refreshes_target_after_foreground_transaction() -> None:
+    events: list[str] = []
+    fresh = {"value": False}
+
+    class Transaction:
+        def __enter__(self):
+            events.append("foreground")
+            return True
+
+        def __exit__(self, exc_type, exc, tb):
+            events.append("restore")
+            return False
+
+    class Adapter:
+        def action_transaction(self):
+            return Transaction()
+
+        def execute(self, command):
+            events.append("input")
+            return {"kind": command.kind, "simulated": False}
+
+    def refresh() -> None:
+        fresh["value"] = True
+        events.append("refresh")
+
+    translator = SkillTranslator(
+        ui_element_supplier=lambda region, element_id: {
+            "global_bbox": [0.7, 0.1, 0.8, 0.2] if fresh["value"] else [0.1, 0.1, 0.2, 0.2],
+        }
+    )
+    result = InputActionExecutor(
+        Adapter(),
+        translator=translator,
+        observe_state=lambda: {"fresh": fresh["value"]},
+        refresh_observation=refresh,
+    ).execute(PlannedAction(
+        "OPEN_BUILD_MENU",
+        {"target_region": "build_menu", "target_element": "build", "changed_fields": ["menu"]},
+    ))
+
+    assert result["commands"][0]["simulated"] is False
+    assert events == ["foreground", "refresh", "input", "restore"]
 
 
 def test_semantic_verifier_requires_observable_state_change() -> None:

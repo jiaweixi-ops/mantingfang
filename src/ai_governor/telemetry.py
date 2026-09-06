@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -78,6 +79,11 @@ class RuntimeTelemetryClient:
         age = now - timestamp.timestamp()
         if age < -self.max_age_seconds or age > self.max_age_seconds:
             raise RuntimeTelemetrySchemaError(f"RUNTIME_STALE: snapshot_age_seconds={age:.3f}")
+        self._validate_state_schema(payload)
+        return payload
+
+    @staticmethod
+    def _validate_state_schema(payload: dict[str, Any]) -> None:
         required = {
             "city_name",
             "year",
@@ -92,7 +98,41 @@ class RuntimeTelemetryClient:
         missing = sorted(key for key in required if key not in payload)
         if missing:
             raise RuntimeTelemetrySchemaError(f"runtime telemetry missing fields: {', '.join(missing)}")
-        return payload
+
+        city_name = payload["city_name"]
+        if not isinstance(city_name, str) or not city_name.strip():
+            raise RuntimeTelemetrySchemaError("runtime telemetry city_name must be a non-empty string")
+        for key in ("year", "month", "population", "buildings_count", "sites_count"):
+            value = payload[key]
+            if type(value) is not int or value < 0:
+                raise RuntimeTelemetrySchemaError(f"runtime telemetry {key} must be a non-negative integer")
+        if not RuntimeTelemetryClient._is_non_negative_number(payload["gold"]):
+            raise RuntimeTelemetrySchemaError("runtime telemetry gold must be a non-negative number")
+        if type(payload["build_menu_open"]) is not bool:
+            raise RuntimeTelemetrySchemaError("runtime telemetry build_menu_open must be bool")
+        resources = payload["resources"]
+        if not isinstance(resources, dict):
+            raise RuntimeTelemetrySchemaError("runtime telemetry resources must be an object")
+        required_resources = {"rice", "vegetable", "wood", "stone"}
+        missing_resources = sorted(name for name in required_resources if name not in resources)
+        if missing_resources:
+            raise RuntimeTelemetrySchemaError(
+                f"runtime telemetry resources missing fields: {', '.join(missing_resources)}"
+            )
+        for name in required_resources:
+            if not RuntimeTelemetryClient._is_non_negative_number(resources[name]):
+                raise RuntimeTelemetrySchemaError(
+                    f"runtime telemetry resources.{name} must be a non-negative number"
+                )
+
+    @staticmethod
+    def _is_non_negative_number(value: Any) -> bool:
+        return (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and math.isfinite(float(value))
+            and value >= 0
+        )
 
     def observe(self) -> Observation:
         payload = self.read()

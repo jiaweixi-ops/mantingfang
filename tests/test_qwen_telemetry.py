@@ -81,7 +81,7 @@ def test_runtime_telemetry_accepts_verified_state(monkeypatch) -> None:
             "month": 4,
             "gold": 1000,
             "population": 10,
-            "resources": {},
+            "resources": {"rice": 50, "vegetable": 50, "wood": 100, "stone": 100},
             "buildings_count": 1,
             "sites_count": 0,
             "build_menu_open": False,
@@ -127,6 +127,34 @@ def test_runtime_telemetry_rejects_incomplete_ok_state(monkeypatch) -> None:
         RuntimeTelemetryClient().read()
 
 
+def test_runtime_telemetry_rejects_null_and_wrong_typed_values(monkeypatch) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    payload = {
+        "source": "runtime_bridge",
+        "status": "OK",
+        "game_pid": 1,
+        "game_version": "1.0.0",
+        "observed_at": now,
+        "city_name": "新的城市",
+        "year": 1,
+        "month": 4,
+        "gold": 1000,
+        "population": 10,
+        "resources": {"rice": 50, "vegetable": 50, "wood": 100, "stone": 100},
+        "buildings_count": 1,
+        "sites_count": 0,
+        "build_menu_open": None,
+    }
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: _Response(payload))
+    with pytest.raises(RuntimeTelemetrySchemaError, match="build_menu_open must be bool"):
+        RuntimeTelemetryClient().read()
+
+    payload["build_menu_open"] = False
+    payload["resources"] = {"rice": 50, "vegetable": None, "wood": 100, "stone": 100}
+    with pytest.raises(RuntimeTelemetrySchemaError, match="resources.vegetable"):
+        RuntimeTelemetryClient().read()
+
+
 def test_runtime_telemetry_rejects_process_version_and_stale_snapshot(monkeypatch) -> None:
     now = datetime.now(timezone.utc).isoformat()
     base = {
@@ -140,7 +168,7 @@ def test_runtime_telemetry_rejects_process_version_and_stale_snapshot(monkeypatc
         "month": 4,
         "gold": 1000,
         "population": 10,
-        "resources": {},
+        "resources": {"rice": 50, "vegetable": 50, "wood": 100, "stone": 100},
         "buildings_count": 1,
         "sites_count": 0,
         "build_menu_open": False,

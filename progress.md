@@ -279,3 +279,11 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - No game process, Live Input, credentials, or E2E command was touched; rerun local tests and CI before considering this phase complete.
 
 - CI rerun `34024937213` passed `pytest (3.11)`, `pytest (3.12)`, `windows-core (3.11)`, and `windows-core (3.12)`.
+
+## 2026-09-06 — V2.3X3 Runtime telemetry hardening
+
+- Corrected the C# bridge inventory path to `BaseData.CenterStoreData.Res` and emit only the validated `rice`, `vegetable`, `wood`, and `stone` fields plus gold; incomplete reflection results now return `UNKNOWN`.
+- Moved Unity sampling into `Plugin.Update`; `TelemetryServer` now returns only the last serialized main-thread snapshot and never reflects Unity objects on its HTTP worker.
+- Added strict Python value/type validation, including required named resources and boolean `build_menu_open`; runtime telemetry now fails closed unless `GOVERNOR_RUNTIME_GAME_VERSION` is configured when enabled.
+- Made opt-in auto-foreground a complete action transaction: foreground activation, fresh observation-cache invalidation, current-frame target resolution, input, and restoration are one boundary.
+- Added regression and source-contract checks; local verification is `116 passed`, compileall PASS, diff check PASS. The bridge remains unbuilt/uninjected because the required .NET/BepInEx/Unity SDK references are unavailable, and no Live E2E or game input was run.

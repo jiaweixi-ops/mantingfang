@@ -105,6 +105,10 @@ class Settings:
         mode = os.getenv("GOVERNOR_EXECUTION_MODE", "dry-run").strip().lower()
         if mode not in {"dry-run", "live"}:
             raise ValueError("GOVERNOR_EXECUTION_MODE must be 'dry-run' or 'live'")
+        runtime_telemetry_enabled = _bool_env("GOVERNOR_RUNTIME_TELEMETRY")
+        runtime_game_version = os.getenv("GOVERNOR_RUNTIME_GAME_VERSION") or None
+        if runtime_telemetry_enabled and not runtime_game_version:
+            raise ValueError("GOVERNOR_RUNTIME_GAME_VERSION is required when GOVERNOR_RUNTIME_TELEMETRY=true")
         return cls(
             db_path=Path(os.getenv("GOVERNOR_DB_PATH", "data/governor.db")),
             memory_profile_path=Path(os.environ["GOVERNOR_MEMORY_PROFILE"]) if os.getenv("GOVERNOR_MEMORY_PROFILE") else None,
@@ -117,8 +121,8 @@ class Settings:
             qwen_vision_model=configured("QWEN_VISION_MODEL", "qwen_vision_model"),
             qwen_reasoning_model=configured("QWEN_REASONING_MODEL", "qwen_reasoning_model"),
             runtime_bridge_url=os.getenv("GOVERNOR_RUNTIME_BRIDGE_URL", cls.runtime_bridge_url).rstrip("/"),
-            runtime_telemetry_enabled=_bool_env("GOVERNOR_RUNTIME_TELEMETRY"),
-            runtime_game_version=os.getenv("GOVERNOR_RUNTIME_GAME_VERSION") or None,
+            runtime_telemetry_enabled=runtime_telemetry_enabled,
+            runtime_game_version=runtime_game_version,
             auto_foreground=_bool_env("GOVERNOR_AUTO_FOREGROUND"),
             restore_previous_foreground=_bool_env("GOVERNOR_RESTORE_PREVIOUS_FOREGROUND", True),
             foreground_stable_seconds=float(os.getenv("GOVERNOR_FOREGROUND_STABLE_SECONDS", "0.6")),

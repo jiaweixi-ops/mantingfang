@@ -3,8 +3,9 @@ from __future__ import annotations
 import ctypes
 import os
 import time
-from dataclasses import dataclass
-from typing import Any, Protocol
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from typing import Any, Iterator, Protocol
 
 from .window import SteamWindowAdapter
 
@@ -70,6 +71,29 @@ class WindowsSendInputAdapter:
     restore_previous_foreground: bool = True
     foreground_stable_seconds: float = 0.6
     foreground_timeout_seconds: float = 5.0
+    _transaction_active: bool = field(default=False, init=False, repr=False)
+
+    @contextmanager
+    def action_transaction(self) -> Iterator[bool]:
+        """Hold one foreground/restore boundary around a complete action."""
+        if self._transaction_active:
+            yield False
+            return
+        self._transaction_active = True
+        previous_foreground: int | None = None
+        try:
+            if self.auto_foreground:
+                info = self.window.locate(restore_minimized=True)
+                _, previous_foreground = self.window.ensure_foreground(
+                    info,
+                    timeout_seconds=self.foreground_timeout_seconds,
+                    stable_seconds=self.foreground_stable_seconds,
+                )
+            yield self.auto_foreground
+        finally:
+            if self.auto_foreground and self.restore_previous_foreground:
+                self.window.restore_foreground(previous_foreground)
+            self._transaction_active = False
 
     def _guard_before_input(self, expected_hwnd: int, expected_pid: int | None, expected_geometry: dict[str, Any] | None = None) -> Any:
         info = self.window.locate()
@@ -88,19 +112,10 @@ class WindowsSendInputAdapter:
         return info
 
     def execute(self, command: InputCommand) -> dict[str, Any]:
-        previous_foreground: int | None = None
-        if self.auto_foreground:
-            info = self.window.locate(restore_minimized=True)
-            info, previous_foreground = self.window.ensure_foreground(
-                info,
-                timeout_seconds=self.foreground_timeout_seconds,
-                stable_seconds=self.foreground_stable_seconds,
-            )
-        try:
+        if self._transaction_active:
             return self._execute_current(command)
-        finally:
-            if self.auto_foreground and self.restore_previous_foreground:
-                self.window.restore_foreground(previous_foreground)
+        with self.action_transaction():
+            return self._execute_current(command)
 
     def _execute_current(self, command: InputCommand) -> dict[str, Any]:
         if not self.enabled:

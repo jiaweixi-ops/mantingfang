@@ -15,7 +15,8 @@ internal sealed class TelemetryServer : IDisposable
     private readonly ManualLogSource log;
     private readonly HttpListener listener = new();
     private readonly int port;
-    private readonly ReadOnlyStateReader reader = new();
+    private readonly object stateGate = new();
+    private string latestStateJson;
     private Thread? worker;
     private volatile bool stopping;
 
@@ -23,6 +24,17 @@ internal sealed class TelemetryServer : IDisposable
     {
         this.log = log;
         this.port = port;
+        latestStateJson = new JavaScriptSerializer().Serialize(
+            ReadOnlyStateReader.Unknown("no_main_thread_snapshot_yet"));
+    }
+
+    public void Publish(object snapshot)
+    {
+        string json = new JavaScriptSerializer().Serialize(snapshot);
+        lock (stateGate)
+        {
+            latestStateJson = json;
+        }
     }
 
     public void Start()
@@ -69,7 +81,12 @@ internal sealed class TelemetryServer : IDisposable
         }
         if (context.Request.Url?.AbsolutePath == "/state")
         {
-            Write(context.Response, reader.Read(), 200);
+            string snapshotJson;
+            lock (stateGate)
+            {
+                snapshotJson = latestStateJson;
+            }
+            WriteJson(context.Response, snapshotJson, 200);
             return;
         }
         Write(context.Response, new { source = "runtime_bridge", status = "BLOCKED", reason = "unknown_endpoint" }, 404);
@@ -78,6 +95,11 @@ internal sealed class TelemetryServer : IDisposable
     private static void Write(HttpListenerResponse response, object payload, int status)
     {
         string json = new JavaScriptSerializer().Serialize(payload);
+        WriteJson(response, json, status);
+    }
+
+    private static void WriteJson(HttpListenerResponse response, string json, int status)
+    {
         byte[] bytes = Encoding.UTF8.GetBytes(json);
         response.StatusCode = status;
         response.ContentType = "application/json; charset=utf-8";

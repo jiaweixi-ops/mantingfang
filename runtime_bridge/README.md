@@ -50,6 +50,13 @@ The implementation must satisfy these constraints:
   snapshots;
 - include an ISO-8601 `observed_at` timestamp; the Python side rejects snapshots
   older than two seconds by default and rejects PID/version mismatches;
+- read the verified inventory from `BaseData.CenterStoreData.Res` using the
+  validated IDs `2/3/4/8/9` for gold/rice/vegetable/wood/stone; `ShowRes` is
+  not the inventory source;
+- publish only complete `status=OK` snapshots; any null, missing, or invalid
+  core value must produce `UNKNOWN`;
+- sample Unity objects from `Plugin.Update` on the Unity main thread and let
+  the HTTP worker return only the last serialized snapshot;
 - bind to loopback only and keep the HTTP surface to `/health` and `/state`;
 - do not log API keys, Feishu credentials, save contents, or full game objects.
 
@@ -68,6 +75,8 @@ The current installation has not been injected or modified automatically.
 Until this project is built against the exact installed BepInEx/Unity
 assemblies and its returned fields are cross-checked against the saved city,
 the Python client must remain disabled (`GOVERNOR_RUNTIME_TELEMETRY=false`).
+When enabled for a verified build, `GOVERNOR_RUNTIME_GAME_VERSION` is required
+and must match the bridge snapshot.
 
 The V5 ZIP supplied during planning contains a reflective bridge prototype, but
 it depends on external BepInEx/Unity assemblies and is not a drop-in build for

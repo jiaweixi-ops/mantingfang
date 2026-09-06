@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
@@ -149,12 +150,21 @@ class InputActionExecutor:
     adapter: InputAdapter
     translator: SkillTranslator = SkillTranslator()
     observe_state: Callable[[], dict[str, Any]] | None = None
+    refresh_observation: Callable[[], None] | None = None
 
     def execute(self, action: PlannedAction) -> dict[str, Any]:
-        before = self.observe_state() if self.observe_state else None
-        commands = self.translator.translate(action)
-        results = [self.adapter.execute(command) for command in commands]
-        after = self.observe_state() if self.observe_state else None
+        transaction_factory = getattr(self.adapter, "action_transaction", None)
+        transaction = transaction_factory() if callable(transaction_factory) else nullcontext(False)
+        with transaction as foreground_reacquired:
+            # When the adapter explicitly re-acquired the game foreground, the
+            # old UI observation is not a valid click target. Invalidate the
+            # capture/vision cache before observing and translating again.
+            if foreground_reacquired and self.refresh_observation is not None:
+                self.refresh_observation()
+            before = self.observe_state() if self.observe_state else None
+            commands = self.translator.translate(action)
+            results = [self.adapter.execute(command) for command in commands]
+            after = self.observe_state() if self.observe_state else None
         simulated = all(result.get("simulated", False) for result in results)
         return {
             "action_type": action.action_type,

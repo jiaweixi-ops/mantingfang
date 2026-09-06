@@ -261,7 +261,7 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Run pytest, compileall, and diff check; never arm Live or send game input.
 - [x] Commit and push after checks; the previous Qwen/telemetry commit is already on `origin/main`.
 
-## V2.3X4 Runtime safety closure (2026-09-06)
+## V2.3X3 Runtime Telemetry implementation safety closure (2026-09-06)
 
 - [x] Remove DeepSeek production/test references and make Qwen the only provider path.
 - [x] Require telemetry PID, game version, timezone-aware `observed_at`, and a bounded snapshot age.
@@ -271,3 +271,16 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Add the read-only BepInEx/Unity bridge reference source and external-reference build contract; do not inject it automatically.
 - [x] Add Windows CI coverage for Python 3.11/3.12 module import, tests, compileall, and diff check.
 - [x] Run CI after push and inspect both Linux and Windows jobs; do not run Live E2E in this phase. Initial Windows failure was fixed by declaring `tzdata>=2022.7`; rerun `34024937213` passed all four jobs.
+- [x] Correct the bridge inventory source to `BaseData.CenterStoreData.Res` and require named core resources.
+- [x] Reject `status=OK` snapshots containing null, missing, or invalid core values.
+- [x] Move Unity sampling to the main thread and serve only the last serialized snapshot from the HTTP worker.
+- [x] Require `GOVERNOR_RUNTIME_GAME_VERSION` whenever runtime telemetry is enabled.
+- [x] Refresh observation cache after an opt-in foreground transition before resolving any live target.
+- [x] Add regression tests for schema, bridge contract, version gating, and foreground refresh ordering.
+
+## V2.3X4 Runtime/Save Cross-check
+
+- [ ] Build the bridge against the exact installed BepInEx/Unity assemblies.
+- [ ] Run the bridge read-only in the real game and verify `/health` and `/state`.
+- [ ] Compare a fresh runtime snapshot against a manually saved `RecordData` copy.
+- [ ] Keep `GOVERNOR_RUNTIME_TELEMETRY=false` until all three checks pass.

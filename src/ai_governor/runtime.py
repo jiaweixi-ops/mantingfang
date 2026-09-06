@@ -50,6 +50,10 @@ class SteamVisionObservationSource:
     last_change_scores: dict[str, float] = field(default_factory=dict, init=False)
     last_frame: CapturedFrame | None = field(default=None, init=False, repr=False)
 
+    def invalidate_cache(self) -> None:
+        """Force the next observation to capture and resolve fresh UI state."""
+        self._cache.clear()
+
     def observe(self):
         frame = self.capture.capture()
         self.last_frame = frame
@@ -134,6 +138,10 @@ def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str]
         raise QwenConfigurationError("QWEN_REASONING_MODEL is not configured")
     if not settings.qwen_vision_model:
         raise QwenConfigurationError("QWEN_VISION_MODEL is not configured")
+    if settings.runtime_telemetry_enabled and not settings.runtime_game_version:
+        raise RuntimeConfigurationError(
+            "GOVERNOR_RUNTIME_GAME_VERSION is required when runtime telemetry is enabled"
+        )
     client = QwenClient(
         settings.qwen_api_base,
         settings.qwen_api_key,
@@ -232,7 +240,12 @@ def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str]
             foreground_stable_seconds=settings.foreground_stable_seconds,
             foreground_timeout_seconds=settings.foreground_timeout_seconds,
         )
-        executor = InputActionExecutor(adapter, translator=translator, observe_state=observe_state)
+        executor = InputActionExecutor(
+            adapter,
+            translator=translator,
+            observe_state=observe_state,
+            refresh_observation=vision_source.invalidate_cache,
+        )
         verifier = SemanticStateVerifier(observe_state)
     actions = ActionEngine(
         settings,
