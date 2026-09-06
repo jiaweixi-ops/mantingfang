@@ -284,6 +284,9 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 
 ## V2.3X4 Runtime/Save Cross-check
 
+- [x] Confirm the exact installed game path, Unity version, and managed assembly set by read-only inspection.
+- [x] Confirm whether a BepInEx/Doorstop installation already exists without changing the game directory.
+- [x] Confirm the existing ignored city-save probe remains available for later comparison.
 - [ ] Build the bridge against the exact installed BepInEx/Unity assemblies.
 - [ ] Run the bridge read-only in the real game and verify `/health` and `/state`.
 - [ ] Compare a fresh runtime snapshot against a manually saved `RecordData` copy.

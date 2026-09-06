@@ -295,6 +295,13 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - `telemetry-read` now locates the current Song window, binds the current Song PID and required `GOVERNOR_RUNTIME_GAME_VERSION`, and returns exit code `2` for any connection, PID, version, stale, or schema failure.
 - Added CLI binding and reflection-cache contract tests. Local verification: `118 passed`, compileall PASS, diff check PASS. No Bridge build/injection, Live E2E, or game input was performed.
 
+## 2026-09-06 — V2.3X4 preparation read-only inspection
+
+- Confirmed the installed game at `F:\SteamLibrary\steamapps\common\Thriving City Song` is Unity `2022.3.62f2` and contains the exact Mono assemblies needed for later reference matching.
+- Confirmed no BepInEx/Doorstop loader is installed in the game directory, and `Song.exe` was not running. No installation, injection, process access, or game input was performed.
+- Confirmed the ignored city-save probe remains available under `data/probe/117224508162075/` for the later Runtime-vs-Save comparison.
+- X4 is blocked at the deliberate loader/build prerequisite. The next step requires a version-compatible loader decision and a running game; keep `GOVERNOR_RUNTIME_TELEMETRY=false`.
+
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 
 - Fixed `TryReadResource` to use the cached reader instance instead of calling instance reflection from a static method.

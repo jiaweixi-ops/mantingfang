@@ -157,6 +157,14 @@
 - `BaseData.CenterStoreData.Res` contains 79 resource entries. Using the reflected `WSFramework.ResId` constants, the saved values include `Gold(id=2)=1000`, `Rice(id=3)=50`, `Vegetable(id=4)=50`, `Wood(id=8)=100`, and `Stone(id=9)=100`, matching the visible new-city HUD values.
 - Only copies under `data/probe/117224508162075/` were inspected. Original save files were not modified. `data/probe/` is now ignored by Git so payloads and evidence cannot be committed accidentally.
 
+## 2026-09-06 — V2.3X4 Runtime/Save Cross-check preparation
+
+- Read-only inspection confirmed the installed game at `F:\SteamLibrary\steamapps\common\Thriving City Song` uses Unity `2022.3.62f2` (`Song.exe`/`UnityPlayer.dll` file version `2022.3.62.9627366`).
+- The exact managed assemblies are present: `Unity.Model.dll`, `UnityEngine.CoreModule.dll`, `Assembly-CSharp.dll`, and `Sirenix.Serialization.dll`. Their local SHA-256 values were recorded only in the command output; no files were modified.
+- No `BepInEx` directory, `BepInEx.dll`, `winhttp.dll`, or `doorstop_config.ini` exists under the game directory. `Song.exe` was not running during the check.
+- The previously captured city save remains available as ignored copies under `data/probe/117224508162075/`, and the original save tree still contains the corresponding `.index`/`.record` pair. No original save was written.
+- Production Bridge build/load and `/health`/`/state` verification are blocked until a version-compatible BepInEx/loader is deliberately installed and the game is running. Do not guess a loader version or install it automatically.
+
 - Use Python 3.11+ with a standard-library-first core to keep local/offline setup portable.
 - Use SQLite for durable local state and an append-only audit trail.
 - Use typed dataclasses and JSON validation at boundaries instead of passing arbitrary model output to an executor.
