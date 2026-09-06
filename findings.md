@@ -148,6 +148,15 @@
 - `DataComponent` exposes `LoadRecord(string/int64)`, `LoadShareRecord`, `SaveRecordIndex`, `OverwriteRecord`, and `RecordPath`; reflection shows `RecordData` metadata and `BaseData`/`SceneData` candidates, but invoking load/save/runtime component code is out of scope for this read-only probe.
 - The local save tree contains only `common.record` and `common.tmp` plus settings/logs; `Version2` is empty and no active-city `RecordData` file is present. A real-time bridge therefore remains blocked until the user creates or exposes a city record, or a separately authorized read-only runtime state source is selected.
 
+## 2026-09-06 — V2.3X2 Real City Save Probe
+
+- After the user manually saved in-game, the save-root diff found `Version2\\117224508162075.index` (20,275 bytes) and `Version2\\117224508162075.record` (266,562 bytes). The index is a BinaryFormatter stream; the record is a ZIP container.
+- The ZIP contains a single payload text entry (the original Windows path is preserved in the archive name). The payload copy begins with the BinaryFormatter header and deserializes to `WSFramework.RootData`.
+- The index copy deserializes to `WSFramework.RecordData`: `Id=117224508162075`, `Name=新的城市`, `Year=1`, `MapId=7`.
+- The payload copy contains `RootData.BaseData` and `RootData.SceneData`: `CityName=新的城市`, `Year=1`, `Month=4` (game month index), `Time=184.1001`, `Villagers.Count=10`, `SceneData.Buildings.Count=1`, `SceneData.Sites.Count=0`, and `ShowRes.Count=4`.
+- `BaseData.CenterStoreData.Res` contains 79 resource entries. Using the reflected `WSFramework.ResId` constants, the saved values include `Gold(id=2)=1000`, `Rice(id=3)=50`, `Vegetable(id=4)=50`, `Wood(id=8)=100`, and `Stone(id=9)=100`, matching the visible new-city HUD values.
+- Only copies under `data/probe/117224508162075/` were inspected. Original save files were not modified. `data/probe/` is now ignored by Git so payloads and evidence cannot be committed accidentally.
+
 - Use Python 3.11+ with a standard-library-first core to keep local/offline setup portable.
 - Use SQLite for durable local state and an append-only audit trail.
 - Use typed dataclasses and JSON validation at boundaries instead of passing arbitrary model output to an executor.

@@ -234,3 +234,17 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Inspected `WSFramework.RecordData`, `BaseData`, `SceneData`, `BuildingData`, `DataComponent`, and the `RecordPath`/load/save API surface. No active-city record file exists under the current Song save tree, so the live city-state bridge cannot yet be validated from disk.
 - Installed only missing test-environment packages in `.venv` (`pytest`, `tzdata`); no project dependency declaration was changed.
 - Verification: `101 passed`; `python -m compileall -q src` PASS; `git diff --check` PASS. No Live E2E, no `arm-live`, no mouse/keyboard input, and no memory writes.
+
+## 2026-09-06 — V2.3X2 pre-save baseline
+
+- Recorded the current Song save-root inventory and SHA-256 metadata in an external temporary baseline file; no save API was called and no original file was copied or modified.
+- Current candidate tree still contains only `common.record`/`common.tmp` plus logs/settings/Unity analytics; no active city record is present before the manual save.
+- Waiting for the user to manually save one city in the game. After confirmation, the next action will be a read-only before/after comparison and parsing of copied candidates only.
+
+## 2026-09-06 — V2.3X2 Save State Extraction PASS
+
+- User manually saved the city; the before/after scan found `Version2\\117224508162075.index` and `Version2\\117224508162075.record`.
+- Copied both candidates to ignored `data/probe/117224508162075/`. The `.record` ZIP payload was copied to an ignored local payload file for parsing; no original path was written.
+- Read-only .NET Framework parsing confirmed `RecordData` metadata and `RootData` state. Extracted city name, year/month, gold, core resources, population count, building count, and visible-resource count.
+- Cross-check: `新的城市`, year 1, gold 1000, rice/vegetable 50, wood/stone 100, and population 10 agree with the new-city HUD values observed before saving; month 4 is the serialized zero-based month index.
+- V2.3X2 is PASS. No Live E2E, no `arm-live`, no mouse/keyboard input, and no process-memory write.

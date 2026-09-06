@@ -9,5 +9,6 @@ build/
 data/*.db
 data/*.db-*
 data/e2e/
+data/probe/
 logs/
 screenshots/

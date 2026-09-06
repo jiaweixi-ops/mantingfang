@@ -239,3 +239,12 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Parse the available common save bytes read-only and extract safe state candidates.
 - [x] Document the concrete blocker: no active-city `RecordData` file is currently present, so no repository probe was added yet.
 - [x] Run focused tests, compileall, and diff check; no Live E2E, memory writes, or game input.
+
+### V2.3X2 Real City Save Probe (2026-09-06)
+
+- [x] Capture a read-only baseline inventory of the Song save root without invoking the game save API.
+- [x] User manually saves one real city in-game.
+- [x] Compare the post-save inventory and identify candidate city-record files.
+- [x] Copy only candidate files to ignored probe storage and inspect metadata/header/hash.
+- [x] Deserialize only the copy and cross-check `CityName`, `Year`, `Month`, `Gold`, `Villagers.Count`, `SceneData.Buildings.Count`, and `ShowRes`.
+- [x] Run tests/compileall/diff check; commit/push remains subject to the GitHub credential gate.
