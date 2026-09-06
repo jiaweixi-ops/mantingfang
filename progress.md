@@ -302,6 +302,7 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Confirmed the ignored city-save probe remains available under `data/probe/117224508162075/` for the later Runtime-vs-Save comparison.
 - X4 is blocked at the deliberate loader/build prerequisite. The next step requires a version-compatible loader decision and a running game; keep `GOVERNOR_RUNTIME_TELEMETRY=false`.
 - After the user started the game, read-only verification found responsive `Song.exe` PID `23392`, HWND `30738232`, and no listener on `127.0.0.1:18765`. BepInEx/Doorstop is still absent; no focus change, injection, input, or game-file modification was performed.
+- After explicit confirmation, installed the verified official x64 BepInEx `5.4.23.5` package into the game root. SHA-256 matched the supplied value and the bundled Doorstop version is `4.5.0`; no separate Doorstop or project Bridge was installed. The game was not restarted, and the real Bridge build is blocked locally because no .NET SDK is installed.
 
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 

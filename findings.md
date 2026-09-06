@@ -165,6 +165,8 @@
 - The previously captured city save remains available as ignored copies under `data/probe/117224508162075/`, and the original save tree still contains the corresponding `.index`/`.record` pair. No original save was written.
 - Production Bridge build/load and `/health`/`/state` verification are blocked until a version-compatible BepInEx/loader is deliberately installed and the game is running. Do not guess a loader version or install it automatically.
 - The user later started the game; a read-only check found `Song.exe` responding at PID `23392`, HWND `30738232`, with the same Unity `2022.3.62f2` build. BepInEx/Doorstop markers remain absent and loopback port `18765` has no listener, so the Bridge is not loaded.
+- After explicit user confirmation, installed only the verified official `BepInEx_win_x64_5.4.23.5.zip` into the exact game root. The archive SHA-256 matched `82f9878551030f54657792c0740d9d51a09500eeae1fba21106b0c441e6732c4`; the package's `.doorstop_version` is `4.5.0`. No existing loader conflict was present, and the project Bridge was not installed.
+- The game process was not restarted after installation. A production Bridge build attempt is currently blocked because this machine has no .NET SDK (`dotnet build` reports SDK not found); only .NET runtimes are installed. No game files were overwritten, no save was changed, and no input or injection occurred.
 
 - Use Python 3.11+ with a standard-library-first core to keep local/offline setup portable.
 - Use SQLite for durable local state and an append-only audit trail.

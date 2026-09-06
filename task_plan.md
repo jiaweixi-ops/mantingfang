@@ -287,6 +287,7 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Confirm the exact installed game path, Unity version, and managed assembly set by read-only inspection.
 - [x] Confirm whether a BepInEx/Doorstop installation already exists without changing the game directory.
 - [x] Confirm the existing ignored city-save probe remains available for later comparison.
+- [x] After explicit user confirmation, install the verified x64 BepInEx package without overwriting a loader or installing a separate Doorstop.
 - [ ] Build the bridge against the exact installed BepInEx/Unity assemblies.
 - [ ] Run the bridge read-only in the real game and verify `/health` and `/state`.
 - [ ] Compare a fresh runtime snapshot against a manually saved `RecordData` copy.
