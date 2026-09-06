@@ -127,3 +127,15 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Calibration verification: `83 passed, 1 skipped`; compileall PASS; diff check PASS. No `arm-live`, SendInput, or `e2e-build-menu`.
 - Delivery: semantic calibration commit `4fe9f57f8622f1bedee21004de54c49a38811db5` pushed to `origin/main`; GitHub Actions run `33975717301` passed on Python 3.11 and 3.12. `build_menu_calibration.json` remains local under ignored `data/e2e/`.
 - Verification after the changes: `72 passed, 1 skipped`; compileall PASS; diff check PASS; `live_armed=false`; no input was sent and no Live E2E was executed.
+
+# 2026-09-05 — Runtime Calibration Contract
+
+- Current issue: the closed-state full-client calibration evidence found the real open control in the upper-right, but the artifact mislabeled it as `build_controls`; `e2e-build-menu` also still hardcoded a stale runtime region list.
+- Scope for this batch: formalize `build_entry`, re-run target resolution through formal ROIs, reject unmappable full-client evidence, wire runtime regions from calibration, and add a read-only current-frame resolver.
+- Safety boundary: no `arm-live`, no SendInput, no mouse/keyboard, and no `e2e-build-menu`.
+- Implementation verification after the resolver/ROI patch: `89 passed, 1 skipped`; Python 3.11 `compileall` PASS; `git diff --check` PASS.
+- Closed-state live calibration PASS: Song HWND `11866876`, PID `39408`, WGC `1280x960`, `build_entry` target resolved twice at confidence `0.95`; no fallback and no input.
+- Open-state calibration first attempt found the correct close semantic at `0.85`; the flow was adjusted so sub-0.90 candidates can enter the required formal-ROI second pass while the final gate remains `>=0.90`.
+- Open-state retry was blocked because Song.exe/window was no longer running (`game window not found: Song`); final two-state calibration and read-only resolver remain pending a relaunch with the menu open.
+- After relaunch, open-state formal calibration passed on Song HWND `526608`, PID `26320`, with `build_controls` close target confidence `0.90`; closed-state resolver passed on the same WGC client with `build_entry` entrance confidence `0.90`.
+- Final local verification after semantic-family compatibility: `89 passed, 1 skipped`; Python 3.11 `compileall` PASS; `git diff --check` PASS. No Live E2E, arm-live, or input was executed.

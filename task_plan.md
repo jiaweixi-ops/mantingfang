@@ -161,3 +161,13 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Add calibration/E2E/resolver regression tests and run pytest/compileall/diff check.
 - [x] Run OPEN calibration only while the menu is currently open; stop for manual CLOSED-state transition.
 - [x] Commit/push only after the requested two-state calibration and CI checks succeed; never arm Live or run e2e-build-menu.
+
+## Runtime Calibration Contract (2026-09-05/06)
+
+- [x] Add the evidence-backed `build_entry` runtime ROI for the closed-state open control.
+- [x] Re-run calibration through formal runtime ROIs and reject full-client targets that cannot be mapped safely.
+- [x] Require finalized calibration to be runtime-resolvable before any E2E runtime is assembled.
+- [x] Add read-only `e2e-resolve-build-menu-targets --state open|closed` with current-frame Vision resolution.
+- [x] Add regression coverage for ROI membership, runtime-region wiring, resolver safety, and no calibration-bbox input fallback.
+- [x] Run pytest/compileall/diff check and perform only read-only resolver validation; never arm Live or run e2e-build-menu.
+- [ ] Commit/push as `fix: align build menu calibration with runtime regions` and verify CI.

@@ -109,7 +109,13 @@ def _candidate_decision(candidate: dict[str, Any]) -> str:
     return "REJECT"
 
 
-def _select_calibration_candidate(observation: dict[str, Any], state: str, region: str) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+def _select_calibration_candidate(
+    observation: dict[str, Any],
+    state: str,
+    region: str,
+    *,
+    allow_second_vision: bool = False,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     allowed = {
         # In the open state we calibrate the control that can close the menu;
         # in the closed state we calibrate the control that can open it.
@@ -124,7 +130,10 @@ def _select_calibration_candidate(observation: dict[str, Any], state: str, regio
         candidate["decision"] = _candidate_decision(candidate)
         if candidate["role"] in allowed:
             candidates.append(candidate)
-    accepted = [item for item in candidates if item["decision"] == "ACCEPT"]
+    accepted = [
+        item for item in candidates
+        if item["decision"] == "ACCEPT" or (allow_second_vision and item["decision"] == "SECOND_VISION_PASS_REQUIRED")
+    ]
     accepted.sort(key=lambda item: float(item.get("confidence", 0)), reverse=True)
     return candidates, accepted[0] if accepted else None
 
@@ -141,6 +150,83 @@ def _bbox_iou(first: list[float] | None, second: list[float] | None) -> float:
     area_second = max(0.0, second[2] - second[0]) * max(0.0, second[3] - second[1])
     union = area_first + area_second - intersection
     return intersection / union if union else 0.0
+
+
+def _bbox_within_region(bbox: Any, region: RegionSpec, *, epsilon: float = 1e-6) -> bool:
+    """Return whether a normalized full-client bbox fits inside a formal ROI."""
+    if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+        return False
+    try:
+        left, top, right, bottom = (float(value) for value in bbox)
+    except (TypeError, ValueError):
+        return False
+    if not 0 <= left < right <= 1 or not 0 <= top < bottom <= 1:
+        return False
+    return (
+        left >= region.left - epsilon
+        and top >= region.top - epsilon
+        and right <= region.right + epsilon
+        and bottom <= region.bottom + epsilon
+    )
+
+
+def _runtime_region_for_state(state: str) -> str:
+    """Return the formal ROI for the control visible in a calibration state."""
+    if state == "closed":
+        return "build_entry"
+    if state == "open":
+        return "build_controls"
+    raise E2EPreflightError("calibration state must be open or closed")
+
+
+def _runtime_role_is_compatible(actual: Any, expected: Any) -> bool:
+    return actual == expected or (expected == "BUILD_MENU_OPEN" and actual == "BUILD_MENU_TOGGLE") or (
+        expected == "BUILD_MENU_CLOSE" and actual == "BUILD_MENU_TOGGLE"
+    )
+
+
+def _canonical_control_is_compatible(actual: Any, expected: Any, expected_role: str) -> bool:
+    if actual == expected:
+        return True
+    if expected_role == "BUILD_MENU_OPEN":
+        return {actual, expected}.issubset({"build_menu_toggle", "build_menu_open_control"})
+    if expected_role == "BUILD_MENU_CLOSE":
+        return {actual, expected}.issubset({"build_menu_toggle", "build_menu_close_control"})
+    return False
+
+
+def calibrated_runtime_regions(calibration: dict[str, Any]) -> tuple[str, ...]:
+    """Build the runtime ROI set from validated calibration, never from guesses."""
+    if not calibration.get("live_e2e_ready") or not calibration.get("runtime_resolvable"):
+        raise E2EConfigurationError("build-menu calibration is not runtime-resolvable")
+    regions = {"resources", "events", "dialog"}
+    for target_name in ("open", "close"):
+        target = calibration.get(target_name)
+        if not isinstance(target, dict) or not isinstance(target.get("region"), str) or not target["region"].strip():
+            raise E2EConfigurationError(f"calibrated {target_name} target has no formal runtime region")
+        regions.add(target["region"].strip())
+    return tuple(sorted(regions))
+
+
+def _runtime_target_valid(target: Any, catalog: RegionCatalog, *, expected_role: str) -> bool:
+    if not isinstance(target, dict):
+        return False
+    region_name = target.get("region")
+    if not isinstance(region_name, str) or not region_name.strip():
+        return False
+    try:
+        region = catalog.get(region_name)
+    except KeyError:
+        return False
+    confidence = target.get("confidence")
+    return (
+        target.get("canonical_id") in {"build_menu_open_control", "build_menu_close_control", "build_menu_toggle"}
+        and _runtime_role_is_compatible(target.get("role"), expected_role)
+        and isinstance(confidence, (int, float))
+        and confidence >= 0.90
+        and _bbox_within_region(target.get("global_bbox"), region)
+        and bool(target.get("runtime_resolvable", False))
+    )
 
 
 def finalize_build_menu_calibration(output_dir: Path) -> dict[str, Any]:
@@ -164,10 +250,21 @@ def finalize_build_menu_calibration(output_dir: Path) -> dict[str, Any]:
             "closed": closed.get("build_menu_open") is False and bool(closed.get("calibration_pass")),
             "open": opened.get("build_menu_open") is True and bool(opened.get("calibration_pass")),
         },
+        "runtime_resolvable": False,
         "live_e2e_ready": False,
     }
+    catalog = RegionCatalog()
     if not open_target or not close_target or not all(result["validated_states"].values()):
         result["reason"] = "one or both state calibrations are incomplete"
+        return result
+    # The closed frame provides the OPEN target and the open frame provides the
+    # CLOSE target.  Their state artifacts must already contain a successful
+    # second Vision pass through their formal runtime ROI.
+    if not _runtime_target_valid(open_target, catalog, expected_role="BUILD_MENU_OPEN"):
+        result["reason"] = "closed-state OPEN target is not runtime-resolvable"
+        return result
+    if not _runtime_target_valid(close_target, catalog, expected_role="BUILD_MENU_CLOSE"):
+        result["reason"] = "open-state CLOSE target is not runtime-resolvable"
         return result
     overlap = _bbox_iou(open_target.get("global_bbox"), close_target.get("global_bbox"))
     matching_role = open_target.get("role") == close_target.get("role")
@@ -175,13 +272,14 @@ def finalize_build_menu_calibration(output_dir: Path) -> dict[str, Any]:
         result["control_mode"] = "TOGGLE"
         result["open"] = {"region": open_target["region"], "canonical_id": open_target["canonical_id"], "role": open_target["role"]}
         result["close"] = {"region": close_target["region"], "canonical_id": close_target["canonical_id"], "role": close_target["role"]}
-    elif open_target.get("role") == "BUILD_MENU_OPEN" and close_target.get("role") == "BUILD_MENU_CLOSE":
+    elif open_target.get("role") in {"BUILD_MENU_OPEN", "BUILD_MENU_TOGGLE"} and close_target.get("role") in {"BUILD_MENU_CLOSE", "BUILD_MENU_TOGGLE"}:
         result["control_mode"] = "SEPARATE"
         result["open"] = {"region": open_target["region"], "canonical_id": open_target["canonical_id"], "role": open_target["role"]}
         result["close"] = {"region": close_target["region"], "canonical_id": close_target["canonical_id"], "role": close_target["role"]}
     else:
         result["reason"] = "open and close targets have no validated toggle or separate semantic mapping"
         return result
+    result["runtime_resolvable"] = True
     result["live_e2e_ready"] = True
     (output_dir / "build_menu_calibration.json").write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return result
@@ -222,28 +320,36 @@ def calibrate_build_menu_state(
         usage_callback=store.record_token_usage,
     )
     perception = PerceptionEngine(client, RegionCatalog(), model=settings.deepseek_vision_model)
-    region = RegionCatalog().get("build_controls")
-    regions_checked = ["build_controls"]
+    catalog = RegionCatalog()
+    runtime_region_name = _runtime_region_for_state(state)
+    runtime_region = catalog.get(runtime_region_name)
+    regions_checked = [runtime_region_name]
     observation = perception.observe_rgba(
         frame.rgba,
         frame.width,
         frame.height,
-        "build_controls",
+        runtime_region_name,
         context=(
             f"只读建筑菜单校准，当前目标状态={state}；必须识别建筑菜单控制语义 role，不执行任何操作。"
-            "如果当前是 closed，build_controls 可能没有底部建筑栏，不要因此猜测；后续会扫描完整客户区。"
+            "只在当前正式校准 ROI 内识别控件，不要猜测 ROI 外的坐标。"
         ),
     )
     expected_open = state == "open"
     state_matches = observation.data.get("build_menu_open") is expected_open
-    candidates, selected = _select_calibration_candidate(observation.data, state, "build_controls")
+    candidates, selected = _select_calibration_candidate(
+        observation.data,
+        state,
+        runtime_region_name,
+        allow_second_vision=True,
+    )
     fallback_used = False
     full_client_vision: dict[str, Any] | None = None
+    selected_source_region: str | None = runtime_region_name if selected else None
     if selected is None:
         fallback_used = True
         regions_checked.append("full_client")
         full_region = RegionSpec(
-            "build_controls",
+            "full_client",
             0.0,
             0.0,
             1.0,
@@ -262,9 +368,79 @@ def calibrate_build_menu_state(
         if full_observation.data.get("build_menu_open") is expected_open:
             state_matches = True
         full_client_vision = _preflight_observation_summary(full_observation.data)
-        full_candidates, full_selected = _select_calibration_candidate(full_observation.data, state, "build_controls")
+        full_candidates, full_selected = _select_calibration_candidate(
+            full_observation.data,
+            state,
+            "full_client",
+            allow_second_vision=True,
+        )
         candidates.extend(full_candidates)
         selected = full_selected
+        selected_source_region = "full_client" if selected else None
+
+    source_selected_target = dict(selected) if selected else None
+    runtime_resolution: dict[str, Any] = {
+        "region": runtime_region_name,
+        "found": False,
+        "canonical_id": None,
+        "role": None,
+        "global_bbox": None,
+        "confidence": None,
+        "source_region": selected_source_region,
+        "runtime_resolvable": False,
+    }
+    runtime_selected: dict[str, Any] | None = None
+    runtime_region_missing = False
+    if selected is not None:
+        if not _bbox_within_region(selected.get("global_bbox"), runtime_region):
+            runtime_region_missing = True
+        else:
+            # Always confirm the candidate through the formal runtime ROI. The
+            # full-client pass is discovery-only and never becomes an input target.
+            runtime_observation = perception.observe_rgba(
+                frame.rgba,
+                frame.width,
+                frame.height,
+                runtime_region_name,
+                context=(
+                    f"只读建筑菜单运行时目标复核，当前状态={state}；"
+                    "只确认正式 ROI 内的同一建筑菜单控件，不执行任何操作。"
+                ),
+            )
+            runtime_candidates, runtime_candidate = _select_calibration_candidate(
+                runtime_observation.data,
+                state,
+                runtime_region_name,
+                allow_second_vision=True,
+            )
+            runtime_resolution["vision"] = _preflight_observation_summary(runtime_observation.data)
+            if runtime_candidate is not None:
+                runtime_resolution.update({
+                    "found": True,
+                    "canonical_id": runtime_candidate.get("canonical_id"),
+                    "role": runtime_candidate.get("role"),
+                    "global_bbox": runtime_candidate.get("global_bbox"),
+                    "confidence": runtime_candidate.get("confidence"),
+                })
+                same_control = _canonical_control_is_compatible(
+                    runtime_candidate.get("canonical_id"),
+                    selected.get("canonical_id"),
+                    "BUILD_MENU_OPEN" if state == "closed" else "BUILD_MENU_CLOSE",
+                )
+                compatible_role = _runtime_role_is_compatible(runtime_candidate.get("role"), selected.get("role"))
+                high_confidence = isinstance(runtime_candidate.get("confidence"), (int, float)) and runtime_candidate["confidence"] >= 0.90
+                if same_control and compatible_role and high_confidence:
+                    runtime_selected = dict(runtime_candidate)
+                    runtime_selected["region"] = runtime_region_name
+                    runtime_selected["runtime_resolvable"] = True
+                    runtime_selected["source_region"] = selected_source_region
+                    runtime_resolution["runtime_resolvable"] = True
+                else:
+                    runtime_resolution["reason"] = "formal ROI resolved a different or low-confidence control"
+            else:
+                runtime_resolution["reason"] = "formal ROI did not resolve the calibrated control"
+    if runtime_region_missing:
+        runtime_resolution["reason"] = "calibrated target bbox is outside its formal runtime ROI"
     result: dict[str, Any] = {
         "state": state,
         "build_menu_open": observation.data.get("build_menu_open"),
@@ -278,8 +454,13 @@ def calibrate_build_menu_state(
         "vision": _preflight_observation_summary(observation.data),
         "full_client_vision": full_client_vision,
         "candidates": candidates,
-        "selected_target": selected,
-        "calibration_pass": bool(state_matches and selected),
+        "source_selected_target": source_selected_target,
+        "selected_target": runtime_selected,
+        "runtime_region": runtime_region_name,
+        "runtime_region_missing": runtime_region_missing,
+        "runtime_resolution": runtime_resolution,
+        "runtime_resolvable": bool(runtime_resolution["runtime_resolvable"]),
+        "calibration_pass": bool(state_matches and runtime_selected),
         "live_e2e_ready": False,
     }
     path = output_dir / f"build_menu_{state}_calibration.json"
@@ -287,6 +468,112 @@ def calibrate_build_menu_state(
     if state == "closed" and result["calibration_pass"]:
         combined = finalize_build_menu_calibration(output_dir)
         result["combined_calibration"] = combined
+    return result
+
+
+def resolve_build_menu_target(
+    settings: Settings,
+    store: SQLiteStore,
+    *,
+    state: str,
+    output_dir: Path = Path("data/e2e"),
+    window_title: str | None = None,
+) -> dict[str, Any]:
+    """Resolve one calibrated target from the current frame without input."""
+    if state not in {"open", "closed"}:
+        raise E2EPreflightError("resolver state must be open or closed")
+    if not settings.deepseek_api_key:
+        raise DeepSeekConfigurationError("DEEPSEEK_API_KEY is not configured")
+    if not settings.deepseek_vision_model:
+        raise DeepSeekConfigurationError("DEEPSEEK_VISION_MODEL is not configured")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    calibration_path = output_dir / "build_menu_calibration.json"
+    if not calibration_path.exists():
+        raise E2EConfigurationError("build_menu_calibration.json is missing")
+    try:
+        calibration = json.loads(calibration_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise E2EConfigurationError("build_menu_calibration.json is invalid") from exc
+    regions = calibrated_runtime_regions(calibration)
+    target_name = "open" if state == "closed" else "close"
+    target = calibration.get(target_name)
+    if not isinstance(target, dict):
+        raise E2EConfigurationError(f"calibrated {target_name} target is missing")
+    region_name = target.get("region")
+    canonical_id = target.get("canonical_id")
+    expected_role = "BUILD_MENU_OPEN" if state == "closed" else "BUILD_MENU_CLOSE"
+    if not isinstance(region_name, str) or region_name not in regions or not isinstance(canonical_id, str):
+        raise E2EConfigurationError("calibrated target has no valid runtime region or canonical ID")
+
+    backend = Win32WindowBackend()
+    selected_title = window_title or settings.game_window_title
+    window = SteamWindowAdapter(selected_title, backend)
+    try:
+        try:
+            info = window.locate()
+        except WindowNotFound:
+            if window_title or selected_title == "Song":
+                raise
+            window = SteamWindowAdapter("Song", backend)
+            info = window.locate()
+        capture = ClientAreaCapture(window, WindowsGraphicsCaptureBackend())
+        frame = capture.capture()
+    except WindowError as exc:
+        raise E2EPreflightError(f"WINDOW_ERROR: {exc}") from exc
+    diagnostic = frame.diagnostic.to_dict() if frame.diagnostic else {}
+    if diagnostic.get("near_black_frame"):
+        raise E2EPreflightError("CAPTURE_BLACK_FRAME")
+    client = DeepSeekClient(
+        settings.deepseek_api_base,
+        settings.deepseek_api_key,
+        settings.deepseek_vision_model,
+        usage_callback=store.record_token_usage,
+    )
+    perception = PerceptionEngine(client, RegionCatalog(), model=settings.deepseek_vision_model)
+    observation = perception.observe_rgba(
+        frame.rgba,
+        frame.width,
+        frame.height,
+        region_name,
+        context=(
+            f"只读建筑菜单运行时目标解析，当前状态={state}；只解析正式 ROI {region_name}，"
+            "不要使用校准文件中的 bbox 或 raw_id，不执行任何操作。"
+        ),
+    )
+    summary = _preflight_observation_summary(observation.data)
+    found = None
+    for element in summary.get("ui_elements", []):
+        if not _canonical_control_is_compatible(element.get("canonical_id"), canonical_id, expected_role):
+            continue
+        if not _runtime_role_is_compatible(element.get("role"), expected_role):
+            continue
+        if not isinstance(element.get("confidence"), (int, float)) or element["confidence"] < 0.90:
+            continue
+        found = element
+        break
+    result = {
+        "state": state,
+        "target": target_name,
+        "region": region_name,
+        "canonical_id": canonical_id,
+        "expected_role": expected_role,
+        "found": found is not None,
+        "element": found,
+        "vision": summary,
+        "capture": diagnostic,
+        "window": {
+            "hwnd": info.hwnd,
+            "title": info.title,
+            "client_width": info.client_width,
+            "client_height": info.client_height,
+        },
+        "arm_live": False,
+        "input_sent": False,
+    }
+    (output_dir / f"build_menu_resolve_{state}.json").write_text(
+        json.dumps(result, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     return result
 
 
@@ -430,7 +717,9 @@ def run_read_only_preflight(
             calibration = json.loads(calibration_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             calibration = {}
-        report["action_target_calibrated"] = bool(calibration.get("live_e2e_ready"))
+        report["action_target_calibrated"] = bool(
+            calibration.get("live_e2e_ready") and calibration.get("runtime_resolvable")
+        )
     report["live_e2e_ready"] = bool(report["action_target_calibrated"])
     report["status"] = "LIVE_E2E_READY" if report["live_e2e_ready"] else "ACTION_TARGET_CALIBRATION_PENDING"
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

@@ -43,6 +43,15 @@
 - CLOSED calibration result: WGC captured `build_menu_open=false`; `build_controls` was empty, so calibration-only full-client fallback found `BUILD_MENU_OPEN` → `build_menu_open_control`, raw ID `build_menu_button_top_right`, confidence `0.90`, global bbox `[0.8, 0.04, 0.85, 0.08]`.
 - Final mapping is `SEPARATE`: closed-state open target is `build_menu_open_control`; open-state close target is `build_menu_close_control`. Both states are validated and `live_e2e_ready=true`; no input was used.
 
+## 2026-09-05 — Runtime Calibration Contract
+
+- The closed-state open target evidence is global bbox `[0.8, 0.04, 0.85, 0.08]`; it belongs to the formal `build_entry` ROI (`0.60..1.00 x 0.00..0.45`), not `build_controls`.
+- Full-client Vision remains calibration-only. A target is persisted as a runtime target only after its global bbox is contained by the formal ROI and a second Vision pass resolves the same canonical ID/compatible role at confidence `>= 0.90`.
+- The runtime must derive its Vision region set from finalized calibration and must fail closed if either calibrated target region is not observed.
+- A read-only resolver will use only the current formal ROI and current Vision elements; it must never send calibration bboxes or raw IDs to the input path.
+- Final calibration succeeded with `SEPARATE`: `open=build_entry/build_menu_toggle`, `close=build_controls/build_menu_close_control`, both states valid, `runtime_resolvable=true`, and `live_e2e_ready=true`.
+- Real open resolver passed at confidence `0.90`; real closed resolver passed at confidence `0.90` after accepting the semantic `BUILD_MENU_TOGGLE`/`BUILD_MENU_OPEN` family as compatible. Both used WGC and reported `near_black_frame=false`; neither sent input.
+
 ## 2026-09-05 — Latest acceptance safety batch
 
 - A semantic post-action verifier alone was too late: the previous flow could emit live input and only then discover that `expected_state`/`changed_fields` was absent. The action engine now performs preflight validation before recording RUNNING or invoking the executor.

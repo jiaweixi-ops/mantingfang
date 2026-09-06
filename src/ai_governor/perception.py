@@ -69,6 +69,7 @@ class RegionCatalog:
         RegionSpec("events", 0.58, 0.04, 1.00, 0.42, "只识别任务、警告、剧情或需要决策的弹窗。"),
         RegionSpec("build_menu", 0.00, 0.78, 0.48, 1.00, "识别当前建筑分类、可建按钮和资源/科技限制。"),
         RegionSpec("build_controls", 0.00, 0.65, 1.00, 1.00, "只识别建筑菜单开关、关闭按钮、建筑栏和分类按钮，不分析地图。"),
+        RegionSpec("build_entry", 0.60, 0.00, 1.00, 0.45, "只识别用于打开建筑/建设菜单的入口控件及必要的相邻 UI，不分析地图。"),
         RegionSpec("dialog", 0.22, 0.18, 0.78, 0.82, "只读取弹窗标题、正文、所有选项及按钮，不推测未显示的内容。"),
     )
 
@@ -141,7 +142,7 @@ class PerceptionEngine:
 
     def _analyze(self, frame: bytes, region: RegionSpec, *, context: str, crop_box: tuple[int, int, int, int] | None) -> Observation:
         schema_instruction = ""
-        if region.name in {"build_menu", "build_controls"}:
+        if region.name in {"build_menu", "build_controls", "build_entry"}:
             schema_instruction = (
                 "本区域必须额外返回 build_menu_open 布尔值和非空 current_screen 字符串；"
                 "build_menu_open 表示建筑菜单当前是否可见。"
@@ -174,7 +175,7 @@ class PerceptionEngine:
 
     @staticmethod
     def _validate_region_schema(result: dict[str, Any], region: RegionSpec) -> None:
-        if region.name in {"build_menu", "build_controls"}:
+        if region.name in {"build_menu", "build_controls", "build_entry"}:
             if not isinstance(result.get("build_menu_open"), bool):
                 raise ValueError("build_menu vision schema requires boolean build_menu_open")
             current_screen = result.get("current_screen")

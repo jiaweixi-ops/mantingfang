@@ -28,7 +28,13 @@ from ai_governor.loop import CompositeObservationSource, GovernorLoop
 from ai_governor.config import Settings, load_persisted_settings, save_persisted_settings
 from ai_governor.cli import build_parser
 from ai_governor.deepseek import DeepSeekClient, DeepSeekRequestError
-from ai_governor.e2e import BuildMenuE2EHarness, E2EConfigurationError, finalize_build_menu_calibration, run_read_only_preflight
+from ai_governor.e2e import (
+    BuildMenuE2EHarness,
+    E2EConfigurationError,
+    calibrated_runtime_regions,
+    finalize_build_menu_calibration,
+    run_read_only_preflight,
+)
 from ai_governor.events import MajorEventCoordinator, MajorEventDetector
 from ai_governor.feishu import CommandRouter, NullFeishuTransport, FeishuGateway
 from ai_governor.feishu_http import FeishuApiClient, FeishuEventHandler, FeishuHttpTransport, FeishuPayloadCipher
@@ -271,6 +277,24 @@ def test_skill_translator_resolves_command_from_observed_ui_element() -> None:
     assert command.kind == "click"
     assert command.x_ratio == pytest.approx(0.25)
     assert command.y_ratio == pytest.approx(0.84)
+
+
+def test_skill_translator_never_uses_calibration_bbox_without_current_global_bbox() -> None:
+    action = PlannedAction(
+        "OPEN_BUILD_MENU",
+        {
+            "target_region": "build_entry",
+            "target_element": "build_menu_open_control",
+            "calibration_bbox": [0.8, 0.04, 0.85, 0.08],
+            "changed_fields": ["menu"],
+        },
+    )
+    translator = SkillTranslator(ui_element_supplier=lambda region, element_id: {
+        "id": element_id,
+        "bbox": [0.1, 0.1, 0.2, 0.2],
+    })
+    with pytest.raises(SkillTranslationError, match="invalid global_bbox"):
+        translator.translate(action)
 
 
 def test_action_engine_blocks_live_action_before_executor_on_bad_contract(store: SQLiteStore, tmp_path: Path) -> None:
@@ -697,6 +721,27 @@ def test_build_menu_e2e_stops_on_first_failed_action(store: SQLiteStore, tmp_pat
     assert actions.plans[1].actions[0].payload["target_region"] == "build_controls"
 
 
+def test_build_menu_e2e_missing_resolved_target_cannot_send_input(store: SQLiteStore, tmp_path: Path) -> None:
+    settings = Settings(db_path=tmp_path / "e2e.db", execution_mode="live", allow_live_input=True)
+    store.set_runtime("live_armed", True)
+
+    class FakeActions:
+        verifier = type("Verifier", (), {"semantic": True})()
+
+        def __init__(self):
+            self.calls = 0
+
+        def execute_plan(self, plan):
+            self.calls += 1
+            return [{"status": "succeeded"}]
+
+    actions = FakeActions()
+    harness = BuildMenuE2EHarness(settings, store, actions)
+    with pytest.raises(E2EConfigurationError, match="targets must come"):
+        harness.run(attempts=1, confirm_live=True)
+    assert actions.calls == 0
+
+
 def test_governor_halts_on_invalid_brain_response(store: SQLiteStore, tmp_path: Path) -> None:
     settings = Settings(db_path=tmp_path / "governor.db")
     engine = ActionEngine(settings, store, DryRunExecutor())
@@ -770,6 +815,27 @@ def test_build_controls_global_bbox_uses_full_client_coordinates() -> None:
     assert element["global_bbox"] == pytest.approx([0.1, 0.72, 0.3, 0.79])
 
 
+def test_build_entry_resolves_open_control_to_canonical_id() -> None:
+    class Analyzer(FakeAnalyzer):
+        def analyze_image_json(self, image, prompt, *, model=None):
+            return {
+                "build_menu_open": False,
+                "current_screen": "city",
+                "ui_elements": [{
+                    "id": "top-right-open",
+                    "role": "BUILD_MENU_OPEN",
+                    "label": "建筑",
+                    "confidence": 0.95,
+                    "bbox": [0.5, 0.1, 0.7, 0.3],
+                }],
+            }
+
+    element = PerceptionEngine(Analyzer(), RegionCatalog()).observe(b"frame", "build_entry").data["ui_elements"][0]
+    assert element["id"] == "build_menu_open_control"
+    assert element["canonical_id"] == "build_menu_open_control"
+    assert element["global_bbox"] == pytest.approx([0.8, 0.045, 0.88, 0.135])
+
+
 def test_calibration_finalize_detects_toggle_and_requires_both_states(tmp_path: Path) -> None:
     assert finalize_build_menu_calibration(tmp_path)["live_e2e_ready"] is False
     open_data = {
@@ -781,6 +847,8 @@ def test_calibration_finalize_detects_toggle_and_requires_both_states(tmp_path: 
             "canonical_id": "build_menu_toggle",
             "region": "build_controls",
             "global_bbox": [0.1, 0.8, 0.2, 0.9],
+            "confidence": 0.95,
+            "runtime_resolvable": True,
         },
     }
     closed_data = {
@@ -791,12 +859,15 @@ def test_calibration_finalize_detects_toggle_and_requires_both_states(tmp_path: 
             "canonical_id": "build_menu_toggle",
             "region": "build_controls",
             "global_bbox": [0.1, 0.8, 0.2, 0.9],
+            "confidence": 0.95,
+            "runtime_resolvable": True,
         },
     }
     (tmp_path / "build_menu_open_calibration.json").write_text(json.dumps(open_data), encoding="utf-8")
     (tmp_path / "build_menu_closed_calibration.json").write_text(json.dumps(closed_data), encoding="utf-8")
     result = finalize_build_menu_calibration(tmp_path)
     assert result["control_mode"] == "TOGGLE"
+    assert result["runtime_resolvable"] is True
     assert result["live_e2e_ready"] is True
 
 
@@ -805,17 +876,59 @@ def test_calibration_finalize_detects_separate_open_close_controls(tmp_path: Pat
     (tmp_path / "build_menu_open_calibration.json").write_text(json.dumps({
         **common,
         "build_menu_open": True,
-        "selected_target": {"role": "BUILD_MENU_CLOSE", "canonical_id": "build_menu_close_control", "region": "build_controls", "global_bbox": [0.1, 0.8, 0.2, 0.9]},
+        "selected_target": {"role": "BUILD_MENU_CLOSE", "canonical_id": "build_menu_close_control", "region": "build_controls", "global_bbox": [0.1, 0.8, 0.2, 0.9], "confidence": 0.95, "runtime_resolvable": True},
     }), encoding="utf-8")
     (tmp_path / "build_menu_closed_calibration.json").write_text(json.dumps({
         **common,
         "build_menu_open": False,
-        "selected_target": {"role": "BUILD_MENU_OPEN", "canonical_id": "build_menu_open_control", "region": "build_controls", "global_bbox": [0.7, 0.8, 0.8, 0.9]},
+        "selected_target": {"role": "BUILD_MENU_OPEN", "canonical_id": "build_menu_open_control", "region": "build_controls", "global_bbox": [0.7, 0.8, 0.8, 0.9], "confidence": 0.95, "runtime_resolvable": True},
     }), encoding="utf-8")
     result = finalize_build_menu_calibration(tmp_path)
     assert result["control_mode"] == "SEPARATE"
     assert result["open"]["canonical_id"] == "build_menu_open_control"
     assert result["close"]["canonical_id"] == "build_menu_close_control"
+
+
+def test_full_client_target_outside_formal_runtime_roi_is_not_saved_as_mapping(tmp_path: Path) -> None:
+    common = {"calibration_pass": True, "resolution": [1280, 960]}
+    (tmp_path / "build_menu_open_calibration.json").write_text(json.dumps({
+        **common,
+        "build_menu_open": True,
+        "selected_target": {
+            "role": "BUILD_MENU_CLOSE", "canonical_id": "build_menu_close_control",
+            "region": "build_controls", "global_bbox": [0.1, 0.8, 0.2, 0.9],
+            "confidence": 0.95, "runtime_resolvable": True,
+        },
+    }), encoding="utf-8")
+    (tmp_path / "build_menu_closed_calibration.json").write_text(json.dumps({
+        **common,
+        "build_menu_open": False,
+        "selected_target": {
+            "role": "BUILD_MENU_OPEN", "canonical_id": "build_menu_open_control",
+            "region": "build_controls", "global_bbox": [0.8, 0.04, 0.85, 0.08],
+            "confidence": 0.95, "runtime_resolvable": True,
+        },
+    }), encoding="utf-8")
+    result = finalize_build_menu_calibration(tmp_path)
+    assert result["live_e2e_ready"] is False
+    assert result["runtime_resolvable"] is False
+    assert result["open"] is None
+
+
+def test_calibrated_runtime_regions_require_and_include_target_rois() -> None:
+    calibration = {
+        "live_e2e_ready": True,
+        "runtime_resolvable": True,
+        "open": {"region": "build_entry"},
+        "close": {"region": "build_controls"},
+    }
+    regions = calibrated_runtime_regions(calibration)
+    assert {"resources", "events", "dialog", "build_entry", "build_controls"}.issubset(regions)
+
+
+def test_calibrated_runtime_regions_fail_closed_when_target_region_missing() -> None:
+    with pytest.raises(E2EConfigurationError, match="not runtime-resolvable"):
+        calibrated_runtime_regions({"live_e2e_ready": True, "runtime_resolvable": False})
 
 
 def test_perception_rejects_invalid_ui_element_bbox() -> None:

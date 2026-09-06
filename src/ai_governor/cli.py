@@ -21,6 +21,8 @@ from .e2e import (
     E2EConfigurationError,
     E2EPreflightError,
     calibrate_build_menu_state,
+    calibrated_runtime_regions,
+    resolve_build_menu_target,
     run_read_only_preflight,
 )
 from .feishu import CommandRouter
@@ -77,6 +79,10 @@ def build_parser() -> argparse.ArgumentParser:
     calibration.add_argument("--state", choices=("open", "closed"), required=True)
     calibration.add_argument("--output-dir", default="data/e2e")
     calibration.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
+    resolver = sub.add_parser("e2e-resolve-build-menu-targets", help="read-only resolve a calibrated build-menu target")
+    resolver.add_argument("--state", choices=("open", "closed"), required=True)
+    resolver.add_argument("--output-dir", default="data/e2e")
+    resolver.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
     preflight = sub.add_parser("e2e-preflight", help="run read-only Steam capture and Vision preflight")
     preflight.add_argument("--wait-for-game-foreground", action="store_true", help="wait up to 30 seconds for Song to remain foreground for 3 seconds")
     preflight.add_argument("--timeout-seconds", type=float, default=30.0)
@@ -317,12 +323,18 @@ def main(argv: list[str] | None = None) -> int:
                 if args.wait_for_game_foreground:
                     run_read_only_preflight(settings, store, wait_for_game_foreground=True)
                 calibration_path = Path("data/e2e") / "build_menu_calibration.json"
-                calibration = {}
-                if calibration_path.exists():
-                    calibration = json.loads(calibration_path.read_text(encoding="utf-8"))
+                if not calibration_path.exists():
+                    raise E2EConfigurationError("build_menu_calibration.json is missing")
+                calibration = json.loads(calibration_path.read_text(encoding="utf-8"))
+                regions = calibrated_runtime_regions(calibration)
                 open_target = calibration.get("open") or {}
                 close_target = calibration.get("close") or {}
-                runtime = build_runtime(settings, store, ("resources", "events", "build_menu", "dialog"))
+                runtime = build_runtime(settings, store, regions)
+                vision_source = runtime.source.sources[0]
+                observed_regions = set(getattr(vision_source, "regions", ()))
+                calibrated_regions = {open_target.get("region"), close_target.get("region")} - {None}
+                if not calibrated_regions.issubset(observed_regions):
+                    raise E2EConfigurationError("calibrated target region is not observed by runtime")
                 result = BuildMenuE2EHarness(
                     settings,
                     store,
@@ -351,6 +363,20 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result.get("calibration_pass") else 2
+        if args.command == "e2e-resolve-build-menu-targets":
+            try:
+                result = resolve_build_menu_target(
+                    settings,
+                    store,
+                    state=args.state,
+                    output_dir=Path(args.output_dir),
+                    window_title=args.title,
+                )
+            except (E2EConfigurationError, E2EPreflightError, DeepSeekConfigurationError, WindowError, CaptureError, OSError, ValueError) as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result.get("found") else 2
         if args.command == "e2e-preflight":
             try:
                 result = run_read_only_preflight(
