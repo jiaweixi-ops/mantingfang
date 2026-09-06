@@ -62,6 +62,7 @@ Build the first usable, safe local foundation for the Steam AI Governor describe
 | Direct GitHub push hit Schannel TLS handshake failure | 1 | Use the machine's configured GitHub proxy URL for this push attempt; do not disable TLS verification |
 | `gh run watch` ended with a transient GitHub API EOF after both jobs showed green | 1 | Rechecked with `gh run list`; the run is completed with `success` for the pushed commit |
 | Task 4 ctypes nested input structures failed during test collection | 1 | Move Win32 input structures to module scope and rerun the suite |
+| Windows CI failed because `zoneinfo` could not find `Asia/Shanghai` | 1 | Declare `tzdata>=2022.7` as a runtime dependency so Windows installs the IANA database through the package install |
 
 ## New memory-scan acceptance checks
 

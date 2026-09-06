@@ -7,7 +7,9 @@ name = "songhua-ai-governor"
 version = "0.1.0"
 description = "Safe, Qwen-only automation foundation for 满庭芳：宋上繁华"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "tzdata>=2022.7",
+]
 
 [project.optional-dependencies]
 feishu-encryption = ["cryptography>=41"]
