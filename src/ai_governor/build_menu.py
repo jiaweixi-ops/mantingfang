@@ -89,6 +89,8 @@ class BuildMenuSnapshot:
     categories: tuple[BuildCategory, ...]
     options: tuple[BuildOption, ...]
     geometry: FrameGeometry | None
+    open_control: dict[str, Any] | None = None
+    close_control: dict[str, Any] | None = None
     evidence: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -98,6 +100,8 @@ class BuildMenuSnapshot:
             "categories": [item.to_dict() for item in self.categories],
             "options": [item.to_dict() for item in self.options],
             "geometry": self.geometry.to_dict() if self.geometry else None,
+            "open_control": self.open_control,
+            "close_control": self.close_control,
             "evidence": self.evidence,
         }
 
@@ -343,4 +347,22 @@ def parse_build_menu_snapshot(
         geometry if geometry is not None else observation.get("geometry")
     )
     evidence = _open_evidence(observation, _elements(observation), min_confidence)
-    return BuildMenuSnapshot(state, current_screen, categories, options, parsed_geometry, evidence)
+    elements = _elements(observation)
+    open_control = next(
+        (dict(item) for item in elements if _valid_element(item, {"BUILD_MENU_OPEN", "BUILD_MENU_TOGGLE"}, min_confidence)),
+        None,
+    )
+    close_control = next(
+        (dict(item) for item in elements if _valid_element(item, {"BUILD_MENU_CLOSE", "BUILD_MENU_TOGGLE"}, min_confidence)),
+        None,
+    )
+    return BuildMenuSnapshot(
+        state,
+        current_screen,
+        categories,
+        options,
+        parsed_geometry,
+        open_control,
+        close_control,
+        evidence,
+    )

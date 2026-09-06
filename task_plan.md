@@ -372,3 +372,12 @@ Result: `FAIL_TIMEOUT_AT_CONNECT`. No type query was reached and no retry is aut
 - [x] Run pytest, compileall, diff check, commit, push, and verify `HEAD == origin/main`.
 
 Scope decision: V2.3X4 Mono Debugger is research-only after the safe connect timeout; do not retry it while implementing V2.4.
+
+## V2.4A/B-R Real-game read-only calibration
+
+- [x] Add a fresh-frame Build Menu observation adapter around the existing WGC and Vision resolver.
+- [x] Keep Vision calls bounded to one calibration call per phase; use local frame/template stability checks for later samples.
+- [x] Add closed, root-open, and category-open three-sample workflows with current-frame geometry and IoU validation.
+- [x] Persist bounded JSON evidence under `data/probe/V2.4ABR/`; never commit large screenshots or secrets.
+- [ ] Run the real read-only calibration only after code verification and required manual UI state changes; do not enter V2.4C.
+- [ ] Run pytest, compileall, diff check, commit, push, and CI verification.

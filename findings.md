@@ -274,3 +274,10 @@
 - V2.4 starts with read-only Build Menu Navigation. The first implementation must model current-frame state and menu structure without invoking Qwen, input, telemetry, or live E2E.
 - Actionable elements remain fail-closed at confidence `>= 0.90`; stale calibration coordinates are not accepted by the new model.
 - The parser must preserve the frame geometry snapshot (HWND/PID/client size/origin/DPI/timestamp) so later resolver work can reject stale targets.
+
+## 2026-09-06 — V2.4A/B-R adapter boundary
+
+- Real-game calibration must remain separate from the pure `build_menu.py` model. The adapter may capture and analyze, but it must never send input or mutate game state.
+- Existing `PerceptionEngine` and normalized `RegionCatalog` remain the source of BUILD_MENU_OPEN/TOGGLE/CLOSE semantics; no second coordinate scheme will be introduced.
+- To honor the no-per-frame-Qwen rule, the adapter will perform at most one Vision calibration request per phase and use fresh-frame pixel/template evidence plus current-frame geometry checks for the remaining samples.
+- Evidence is bounded JSON only. Runtime screenshots remain local/ignored unless an existing repository rule explicitly allows them.

@@ -410,3 +410,15 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Added six focused tests (including malformed structures and a no-Qwen/no-input boundary check); full suite is `132 passed`.
 - `compileall` and `git diff --check` pass. No game process, debugger, capture, model API, telemetry, or input path was invoked.
 - GitHub Actions run `34031578192` completed successfully across Python 3.11/3.12, Windows 3.11/3.12, Bridge compile, and existing probe jobs. The implementation commit is `a7c72d8bbee3912c06ebf750cc4424b8289aa0d1`, and the follow-up record update is being pushed after this verification.
+
+## 2026-09-06 — V2.4A/B-R started
+
+- User authorized real-game read-only calibration with zero SendInput, keyboard/mouse input, map clicks, save writes, memory writes, Runtime Telemetry, and Mono Debugger.
+- Required manual phases are preserved: closed menu first, then user opens the menu, then user enters one ordinary category. No phase will click or change the game.
+
+## 2026-09-06 — V2.4A/B-R adapter code complete
+
+- Added `src/ai_governor/build_menu_observer.py` and CLI command `e2e-calibrate-build-menu-readonly`.
+- The adapter reuses WGC, `PerceptionEngine`, `RegionCatalog`, existing BUILD_MENU_OPEN/TOGGLE/CLOSE roles, and current HWND/PID/geometry metadata.
+- Vision is bounded to one `qwen3.8-flash` calibration call per phase. Subsequent samples use fresh-frame local patch matching and current-frame bbox output; no prior bbox is used as an actionable target.
+- Added observer tests; local full suite is `135 passed`. Real-game sampling has not started yet.

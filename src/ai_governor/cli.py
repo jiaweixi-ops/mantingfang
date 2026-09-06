@@ -28,6 +28,7 @@ from .e2e import (
     run_live_build_menu_roundtrip,
     run_read_only_preflight,
 )
+from .build_menu_observer import BuildMenuCalibrationError, sample_build_menu_phase
 from .feishu import CommandRouter
 from .feishu_http import FeishuApiClient, FeishuCallbackServer, FeishuEventHandler
 from .memory import (
@@ -114,6 +115,16 @@ def build_parser() -> argparse.ArgumentParser:
     preflight.add_argument("--poll-seconds", type=float, default=0.5)
     preflight.add_argument("--output-dir", default="data/e2e")
     preflight.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
+    readonly_calibration = sub.add_parser(
+        "e2e-calibrate-build-menu-readonly",
+        help="sample one real-game Build Menu phase with WGC and zero input",
+    )
+    readonly_calibration.add_argument("--phase", choices=("closed", "root", "category"), required=True)
+    readonly_calibration.add_argument("--samples", type=int, default=3)
+    readonly_calibration.add_argument("--interval", type=float, default=0.5)
+    readonly_calibration.add_argument("--output-dir", default="data/probe/V2.4ABR")
+    readonly_calibration.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
+    readonly_calibration.add_argument("--vision-model", default="qwen3.8-flash")
     sub.add_parser("memory-processes", help="list Windows processes for profile calibration")
     memory_modules = sub.add_parser("memory-modules", help="list loaded modules for one Windows process")
     memory_modules.add_argument("--process-name", required=True, help="exact process name, for example Song.exe")
@@ -503,6 +514,30 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0
+        if args.command == "e2e-calibrate-build-menu-readonly":
+            try:
+                result = sample_build_menu_phase(
+                    settings,
+                    store,
+                    phase=args.phase,
+                    samples=args.samples,
+                    interval_seconds=args.interval,
+                    output_dir=Path(args.output_dir),
+                    window_title=args.title,
+                    vision_model=args.vision_model,
+                )
+            except (
+                BuildMenuCalibrationError,
+                QwenConfigurationError,
+                WindowError,
+                CaptureError,
+                OSError,
+                ValueError,
+            ) as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result.get("stability", {}).get("stable") else 2
         reports = ReportService(store)
         watchdog = Watchdog(store)
         router = CommandRouter(store, reports, watchdog)
