@@ -46,14 +46,24 @@ _PHASE_CONFIG = {
         "output_key": "root_open",
         "region": "build_controls",
         "expected_state": BuildMenuState.ROOT_OPEN,
-        "context": "用户已经手动打开建筑菜单。只识别关闭控件和真实 BUILD_CATEGORY_TAB 分类，不执行任何操作。",
+        "context": (
+            "用户已经手动打开建筑菜单。只识别关闭控件和真实 BUILD_CATEGORY_TAB 分类，不执行任何操作。"
+            "必须逐项检查当前裁剪图中的关闭控件：若可见，ui_elements 必须包含 role=BUILD_MENU_CLOSE"
+            "（若游戏只呈现同一个切换控件则使用 role=BUILD_MENU_TOGGLE），并给出其当前帧 bbox。"
+            "分类标签必须使用 role=BUILD_CATEGORY_TAB；不要把分类标签标成 BUILD_OPTION。"
+        ),
         "required_roles": {"BUILD_MENU_CLOSE", "BUILD_MENU_TOGGLE", "BUILD_CATEGORY_TAB"},
     },
     "category": {
         "output_key": "category_open",
         "region": "build_controls",
         "expected_state": BuildMenuState.CATEGORY_OPEN,
-        "context": "用户已经手动进入一个普通建筑分类。只识别关闭控件和真实 BUILD_OPTION/BUILD_DISABLED_OPTION 建筑卡片，不执行任何操作。未知 label/locked/costs 必须留空或 UNKNOWN，不要猜测。",
+        "context": (
+            "用户已经手动进入一个普通建筑分类。只识别关闭控件和真实 BUILD_OPTION/BUILD_DISABLED_OPTION"
+            "建筑卡片，不执行任何操作。必须逐项检查当前裁剪图中的关闭控件：若可见，ui_elements 必须包含"
+            "role=BUILD_MENU_CLOSE（若游戏只呈现同一个切换控件则使用 role=BUILD_MENU_TOGGLE），并给出其当前帧 bbox。"
+            "未知 label/locked/costs 必须留空或 UNKNOWN，不要猜测。"
+        ),
         "required_roles": {"BUILD_MENU_CLOSE", "BUILD_MENU_TOGGLE", "BUILD_OPTION", "BUILD_DISABLED_OPTION"},
     },
 }

@@ -281,3 +281,10 @@
 - Existing `PerceptionEngine` and normalized `RegionCatalog` remain the source of BUILD_MENU_OPEN/TOGGLE/CLOSE semantics; no second coordinate scheme will be introduced.
 - To honor the no-per-frame-Qwen rule, the adapter will perform at most one Vision calibration request per phase and use fresh-frame pixel/template evidence plus current-frame geometry checks for the remaining samples.
 - Evidence is bounded JSON only. Runtime screenshots remain local/ignored unless an existing repository rule explicitly allows them.
+
+## 2026-09-06 — V2.4A/B-R ROOT_OPEN read-only diagnosis
+
+- The real WGC frame is healthy: `WindowsGraphicsCaptureBackend`, `WGC`, `near_black_frame=false`, and the Song HWND/PID/client geometry stayed stable across the attempted samples.
+- The first ROOT_OPEN Vision response produced eight high-confidence category candidates but no `BUILD_MENU_CLOSE`/`BUILD_MENU_TOGGLE` element, so the pure state detector correctly returned `UNKNOWN` and rejected the phase.
+- The adapter prompt was tightened to require visible close-control reporting and to keep category tabs distinct from build options. A subsequent flash response was a top-level JSON array and was rejected by the existing fail-closed schema guard; the exceptional max-model attempt timed out. No live input or game mutation occurred.
+- Do not mark ROOT_OPEN or the complete V2.4A/B-R acceptance as passed until a fresh 3/3 run contains an accepted close-control geometry and stable `ROOT_OPEN` state.

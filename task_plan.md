@@ -381,3 +381,5 @@ Scope decision: V2.3X4 Mono Debugger is research-only after the safe connect tim
 - [x] Persist bounded JSON evidence under `data/probe/V2.4ABR/`; never commit large screenshots or secrets.
 - [ ] Run the real read-only calibration only after code verification and required manual UI state changes; do not enter V2.4C.
 - [ ] Run pytest, compileall, diff check, commit, push, and CI verification.
+
+Current execution note: CLOSED is PASS; ROOT_OPEN is pending because the real Vision response has not yet yielded an accepted close-control element across three stable fresh frames. Category phase has not started.
