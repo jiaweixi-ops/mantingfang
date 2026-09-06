@@ -326,6 +326,12 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - No fresh preloader log, BepInEx log, config directory, plugins directory, or updated Player.log was produced. The override cannot yet be classified as passing or failing; the phase remains blocked on fresh loader evidence.
 - No configuration change, file deletion, loader replacement, Bridge installation, telemetry enablement, input, save write, or memory write occurred.
 
+## 2026-09-06 — Doorstop-only bootstrap prepared
+
+- Restored the exact pre-corlib Doorstop configuration after the game closed. The configured corlib override directory is no longer present; its official files remain in a clearly named rollback directory outside the configured search path because local safety policy rejected permanent recursive deletion.
+- Added a minimal `net40` Doorstop entrypoint and CI artifact job. It is intentionally source/CI-only: no bootstrap DLL is installed, no debugger server is enabled, and no game configuration points at it.
+- Local validation: `121 passed`, Python compileall PASS, and diff check PASS. CI artifact compilation is pending the pushed workflow run.
+
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 
 - Fixed `TryReadResource` to use the cached reader instance instead of calling instance reflection from a static method.

@@ -193,6 +193,13 @@
 - No new `preloader_*.log` was created, the existing preloader log remains the earlier `18:28:26` `GetPEKind` failure, `BepInEx\\LogOutput.log` is absent, and the latest `Player.log` was not updated after this restart. No new BepInEx/Chainloader evidence is available.
 - The game is therefore classified as `BEPINEX_BOOT=UNCONFIRMED_AFTER_CORLIB_OVERRIDE`, not PASS or `CORLIB_OVERRIDE_FAILED`; no further DLL substitutions or configuration changes are allowed without new evidence.
 
+## 2026-09-06 — Corlib rollback and Doorstop-only bootstrap
+
+- After `Song.exe` exited, restored `doorstop_config.ini` byte-for-byte from the verified backup. Its SHA-256 again matches the pre-corlib baseline: `4D5C6DFA0F771C6A5B1B0C559ACA0BD0ECE7D08B08FFF894708DC3B73CE73CFC`.
+- The configured `BepInEx\\unstripped_corlib` path was removed. The 15 official corlib files were moved to `BepInEx\\unstripped_corlib.v2.3x4b-rollback` after the deletion operation was rejected by the local safety policy; this preserves a reversible rollback copy while keeping it outside Doorstop's lookup path.
+- Added a source-only `runtime_probe/DoorstopBootstrap.cs` with the required no-op `Doorstop.Entrypoint.Start()` and a `net40` project. It has no BepInEx, Unity, Harmony, reflection, threading, file, or network dependency.
+- Added a CI-only build/artifact job for `DoorstopTelemetryBootstrap.dll`. It has not been copied to the game directory, and no Doorstop debugger configuration has been applied.
+
 - Use Python 3.11+ with a standard-library-first core to keep local/offline setup portable.
 - Use SQLite for durable local state and an append-only audit trail.
 - Use typed dataclasses and JSON validation at boundaries instead of passing arbitrary model output to an executor.

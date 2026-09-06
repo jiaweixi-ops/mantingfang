@@ -9,6 +9,22 @@ permissions:
   contents: read
 
 jobs:
+  doorstop-bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build no-op Doorstop bootstrap
+        run: dotnet build runtime_probe/DoorstopBootstrap.csproj --configuration Release
+      - name: Publish Doorstop bootstrap artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DoorstopTelemetryBootstrap
+          path: runtime_probe/bin/Release/net40/DoorstopTelemetryBootstrap.dll
+          if-no-files-found: error
+
   bridge-compile:
     runs-on: ubuntu-latest
     steps:

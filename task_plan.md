@@ -303,3 +303,10 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Back up `doorstop_config.ini` and apply only the UnityMono search-path override.
 - [ ] Stop and wait for the user to restart the game; inspect only the resulting loader artifacts.
 - [x] Push the preparation records without committing staged binaries or game-directory files.
+
+## V2.3X4-C Doorstop-only debugger bootstrap preparation
+
+- [x] Restore the pre-corlib Doorstop configuration after the game process exited; keep the failed corlib set outside its configured lookup path for recoverability.
+- [x] Add a minimal, no-op Doorstop entrypoint that references neither BepInEx nor Unity.
+- [ ] Validate CI compilation and artifact publication for the bootstrap only.
+- [ ] Do not deploy the bootstrap or enable the Mono debugger until the user explicitly confirms the baseline game start is healthy.
