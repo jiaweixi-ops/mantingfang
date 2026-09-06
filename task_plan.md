@@ -75,6 +75,15 @@ Build the first usable, safe local foundation for the Steam AI Governor describe
 
 Keep the local worktree clean. The remaining acceptance work is external calibration: validated memory fields and a separately gated real Steam E2E run with the game window, UI IDs, and DeepSeek configuration available.
 
+## V2.4C First Controlled Build Category Click (2026-09-06)
+
+- [x] Add a pure `BuildCategoryNavigator` which makes a one-click plan only from a current-frame `ROOT_OPEN` snapshot.
+- [x] Add a deterministic current-frame category-tab detector; calibration bboxes remain non-actionable seeds only.
+- [x] Add an explicitly confirmed, one-click-only Live CLI path that requires current `ROOT_OPEN`, exact foreground HWND/PID, stable geometry, cursor verification, and live arming.
+- [x] Verify a freshly captured post-click `CATEGORY_OPEN` state with a local close control and one or more local build-option slots; never send a second input.
+- [x] Add regression tests for stale/unsafe plans, role/bounds filtering, zero-Qwen behavior, and one-click fail-closed outcomes.
+- [x] Run pytest, compileall, diff check, execute the authorized real one-click scenario, then commit/push and verify CI. Do not enter V2.4D.
+
 ## V0.2 Game Integration backlog from latest acceptance
 
 Execute and push each item as its own verified task:

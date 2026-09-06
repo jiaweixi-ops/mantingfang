@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ai_governor.build_option_detector import _nms, detect_build_option_slots
+from ai_governor.build_option_detector import _nms, detect_build_category_tabs, detect_build_option_slots
 from ai_governor.perception import RegionCatalog
 
 
@@ -59,3 +59,15 @@ def test_nms_discards_overlapping_candidate() -> None:
     ]
     result = _nms(candidates)
     assert [item["bbox"] for item in result] == [[0.10, 0.70, 0.20, 0.80], [0.30, 0.70, 0.40, 0.80]]
+
+
+def test_category_tabs_are_redetected_on_this_frame_not_loaded_from_calibration() -> None:
+    width, height = 1280, 960
+    frame = _frame(width, height)
+    _paint(frame, width, 90, 660, 190, 755)
+    tabs = detect_build_category_tabs(bytes(frame), width, height, RegionCatalog())
+    assert len(tabs) == 1
+    assert tabs[0]["id"] == "build_category_tab_01"
+    assert tabs[0]["role"] == "BUILD_CATEGORY_TAB"
+    assert tabs[0]["resolver"] == "deterministic_current_frame_category_tab"
+    assert tabs[0]["confidence"] >= 0.90

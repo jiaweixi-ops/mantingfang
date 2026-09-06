@@ -443,3 +443,11 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Added synthetic tests for repeated option slots, root-tab/closed/map/close-control exclusions, invalid size/boundary candidates, overlap suppression, left-to-right IDs, and category center-drift rejection.
 - Real-game CATEGORY_OPEN calibration passed: `category_open` 3/3, eight stable options, WGC healthy, stable Song HWND `134730` / PID `32776` / `1280x960` geometry / DPI `96`, slot confidence at least `0.9728`, IoU threshold `0.85`, and center-drift threshold `4.8px`.
 - R3 invoked Qwen zero times and made zero SendInput, keyboard/mouse, map-click, save-write, memory-write, Runtime Telemetry, or Mono Debugger operations. All three V2.4A/B-R states now pass, so the result is `PASS_GEOMETRY_CALIBRATED`; V2.4C remains deliberately untouched.
+# 2026-09-06 — V2.4C started
+
+- Resumed from V2.4A/B-R3 `PASS_GEOMETRY_CALIBRATED` at commit `d8a5c15`.
+- User authorized exactly one controlled category-tab click after fresh ROOT_OPEN preconditions; implementation is Codex-direct with no Harness and no Qwen calls.
+- Added `build_category_navigator.py`, `build_category_e2e.py`, deterministic current-frame category-tab output, guarded dry-run/live CLI commands, and unit coverage. Full local verification: `146 passed`; no input has been sent.
+- First V2.4C dry-run: fail-closed before any input because local category provenance was not retained by the parser. Applying a minimal observer-only provenance preservation fix; no Qwen or input involved.
+- Fixed provenance preservation, reran dry-run successfully, then executed the authorized V2.4C one-click scenario. Result: PASS (`ROOT_OPEN -> CATEGORY_OPEN`), click count 1, fresh postcondition found 8 option slots, live automatically disarmed. Local evidence remains ignored at `data/probe/V2.4C/result.json`.
+- Committed the V2.4C implementation and test/plan records as `4847274` (`feat: verify one-click build category navigation`); remote push and CI confirmation are next. No V2.4D action has been started.

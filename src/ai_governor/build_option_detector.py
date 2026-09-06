@@ -181,3 +181,31 @@ def detect_build_option_slots(
             **candidate,
         })
     return slots
+
+
+def detect_build_category_tabs(
+    rgba: bytes,
+    width: int,
+    height: int,
+    region_catalog: RegionCatalog,
+) -> list[dict[str, Any]]:
+    """Return current-frame category-card geometry without semantic guessing.
+
+    The root Build Menu uses the same repeated-card visual structure as the
+    category page.  This wrapper deliberately re-runs the local detector on
+    *this* frame and changes only its role and non-semantic identity.  It never
+    converts a previous calibration bbox into an actionable current target.
+    """
+    categories: list[dict[str, Any]] = []
+    for index, slot in enumerate(detect_build_option_slots(rgba, width, height, region_catalog), start=1):
+        identifier = f"build_category_tab_{index:02d}"
+        categories.append({
+            **slot,
+            "id": identifier,
+            "canonical_id": identifier,
+            "raw_id": identifier,
+            "role": "BUILD_CATEGORY_TAB",
+            "label": "unknown",
+            "resolver": "deterministic_current_frame_category_tab",
+        })
+    return categories

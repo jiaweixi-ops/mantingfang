@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Mapping
 from uuid import uuid4
@@ -21,7 +22,7 @@ from .build_menu import (
     FrameGeometry,
     parse_build_menu_snapshot,
 )
-from .build_option_detector import detect_build_option_slots
+from .build_option_detector import detect_build_category_tabs, detect_build_option_slots
 from .capture import CaptureBlackFrameError, ClientAreaCapture, WindowsGraphicsCaptureBackend
 from .config import Settings
 from .models import utc_now
@@ -300,6 +301,42 @@ def _compose_phase_observation(
         observation["building_options"] = options
         observation.pop("categories", None)
     return observation
+
+
+def build_local_menu_snapshot(
+    *,
+    phase: str,
+    frame: Any,
+    capture: ClientAreaCapture,
+    backend: Win32WindowBackend,
+    catalog: RegionCatalog,
+) -> BuildMenuSnapshot:
+    """Parse one fresh WGC frame using deterministic menu-control geometry.
+
+    ``root`` emits only locally redetected category-card geometry, while
+    ``category`` emits only locally redetected build-option geometry.  Both
+    paths require the separately redetected close control and do not call
+    Qwen or load any calibration artifact.
+    """
+    if phase not in {"root", "category"}:
+        raise BuildMenuCalibrationError("local menu snapshot phase must be root or category")
+    geometry = _geometry(capture, backend)
+    local_control = _resolve_local_menu_control(frame.rgba, frame.width, frame.height, catalog)
+    if phase == "root":
+        elements = detect_build_category_tabs(frame.rgba, frame.width, frame.height, catalog)
+        base: dict[str, Any] = {"categories": elements, "ui_elements": elements}
+    else:
+        elements = detect_build_option_slots(frame.rgba, frame.width, frame.height, catalog)
+        base = {"building_options": elements, "ui_elements": elements}
+    observation = _compose_phase_observation(phase, base, local_control)
+    observation["category_source"] = (
+        "deterministic_current_frame_category_tab" if phase == "root" else None
+    )
+    snapshot = parse_build_menu_snapshot(observation, geometry=geometry)
+    evidence = dict(snapshot.evidence)
+    if phase == "root":
+        evidence["category_source"] = "deterministic_current_frame_category_tab"
+    return replace(snapshot, evidence=evidence)
 
 
 def _geometry(capture: ClientAreaCapture, backend: Win32WindowBackend) -> FrameGeometry:

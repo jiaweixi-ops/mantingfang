@@ -28,6 +28,7 @@ from .e2e import (
     run_live_build_menu_roundtrip,
     run_read_only_preflight,
 )
+from .build_category_e2e import BuildCategoryE2EError, run_build_category_dry_run, run_live_build_category_once
 from .build_menu_observer import BuildMenuCalibrationError, sample_build_menu_phase
 from .feishu import CommandRouter
 from .feishu_http import FeishuApiClient, FeishuCallbackServer, FeishuEventHandler
@@ -108,6 +109,16 @@ def build_parser() -> argparse.ArgumentParser:
     close_only.add_argument("--verify-timeout-seconds", type=float, default=5.0)
     close_only.add_argument("--poll-seconds", type=float, default=0.25)
     close_only.add_argument("--wait-for-game-foreground", action="store_true", help="wait without focusing until Song is foreground for 3 seconds")
+    category_plan = sub.add_parser("e2e-plan-build-category", help="read-only current-frame V2.4C category click planning")
+    category_plan.add_argument("--output-dir", default="data/probe/V2.4C")
+    category_plan.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
+    category_once = sub.add_parser("e2e-build-category-once", help="run exactly one guarded Live click on a fresh Build Menu category target")
+    category_once.add_argument("--confirm-live-category", action="store_true", help="required confirmation before the one real category click")
+    category_once.add_argument("--output-dir", default="data/probe/V2.4C")
+    category_once.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
+    category_once.add_argument("--wait-for-game-foreground", action="store_true", help="wait without focusing until Song is foreground for 3 seconds")
+    category_once.add_argument("--foreground-timeout-seconds", type=float, default=30.0)
+    category_once.add_argument("--settle-seconds", type=float, default=0.6)
     preflight = sub.add_parser("e2e-preflight", help="run read-only Steam capture and Vision preflight")
     preflight.add_argument("--wait-for-game-foreground", action="store_true", help="wait up to 30 seconds for Song to remain foreground for 3 seconds")
     preflight.add_argument("--timeout-seconds", type=float, default=30.0)
@@ -493,6 +504,37 @@ def main(argv: list[str] | None = None) -> int:
                     wait_for_game_foreground=args.wait_for_game_foreground,
                 )
             except (E2EConfigurationError, E2EPreflightError, QwenConfigurationError, WindowError, CaptureError, OSError, ValueError) as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result.get("result") == "PASS" else 2
+        if args.command == "e2e-plan-build-category":
+            try:
+                result = run_build_category_dry_run(
+                    settings,
+                    output_dir=Path(args.output_dir),
+                    window_title=args.title,
+                )
+            except (BuildCategoryE2EError, WindowError, CaptureError, OSError, ValueError) as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0
+        if args.command == "e2e-build-category-once":
+            if not args.confirm_live_category:
+                print("ERROR: V2.4C requires --confirm-live-category", file=sys.stderr)
+                return 2
+            try:
+                result = run_live_build_category_once(
+                    settings,
+                    store,
+                    output_dir=Path(args.output_dir),
+                    window_title=args.title,
+                    wait_for_game_foreground=args.wait_for_game_foreground,
+                    foreground_timeout_seconds=args.foreground_timeout_seconds,
+                    settle_seconds=args.settle_seconds,
+                )
+            except (BuildCategoryE2EError, WindowError, CaptureError, OSError, ValueError) as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 2
             print(json.dumps(result, ensure_ascii=False, indent=2))
