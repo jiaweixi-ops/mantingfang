@@ -155,7 +155,7 @@ class PerceptionEngine:
         prompt = (
             f"任务上下文：{context or '读取当前区域状态'}\n"
             f"关注区域：{region.name}\n{region.focus_instruction}\n"
-            "只返回可从图像确认的事实，未知值使用 null；返回 JSON。"
+            "只返回一个 JSON object（最外层绝对不能是数组），只报告可从图像确认的事实，未知值使用 null。"
             "如果看见可操作控件，额外返回 ui_elements 数组；每项必须是"
             "{id: string, role: string, label: string, bbox: [left, top, right, bottom], confidence: number}，"
             "bbox 是相对于当前裁剪图的 0 到 1 归一化坐标，不要猜测不可见控件。"
@@ -164,6 +164,8 @@ class PerceptionEngine:
             f"{schema_instruction}"
         )
         result = self.analyzer.analyze_image_json(frame, prompt, model=self.model)
+        if not isinstance(result, dict):
+            raise ValueError("vision analyzer must return a top-level JSON object")
         self._validate_region_schema(result, region)
         result = self._normalize_ui_elements(result, region)
         confidence = result.get("confidence")

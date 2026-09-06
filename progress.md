@@ -423,3 +423,4 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Vision is bounded to one `qwen3.8-flash` calibration call per phase. Subsequent samples use fresh-frame local patch matching and current-frame bbox output; no prior bbox is used as an actionable target.
 - Added observer tests; local full suite is `135 passed`. Real-game sampling has not started yet.
 - Read-only preflight found no running `Song.exe`, so no WGC frame or Vision request was made. The calibration phase is waiting for the user to start the game and leave the Build Menu closed; no input or focus change was performed.
+- First CLOSED attempt after the user started the game reached fresh WGC and made one bounded Vision request, but the model returned a top-level JSON array. No evidence file was written and no input was sent; the Vision prompt and boundary validation were tightened before retrying.
