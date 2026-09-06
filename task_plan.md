@@ -294,3 +294,12 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [ ] Keep `GOVERNOR_RUNTIME_TELEMETRY=false` until all three checks pass.
 - [x] Run read-only Doorstop diagnosis and record the concrete Preloader failure; no loader replacement or config edit is authorized by this phase.
 - [ ] Resolve BepInEx/Unity Mono Preloader compatibility, then re-check `BEPINEX_BOOT` before considering any build toolchain work.
+
+## V2.3X4-B Exact Unity Corlib Compatibility Test
+
+- [x] Preserve and hash the current Unity managed core assemblies.
+- [x] Download and hash the official Unity 2022.3.62 corlibs in staging only.
+- [x] Inspect the staged `mscorlib.dll` metadata without loading it.
+- [x] Back up `doorstop_config.ini` and apply only the UnityMono search-path override.
+- [ ] Stop and wait for the user to restart the game; inspect only the resulting loader artifacts.
+- [x] Push the preparation records without committing staged binaries or game-directory files.

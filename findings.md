@@ -178,6 +178,14 @@
 - Root cause is therefore a BepInEx 5.4.23.5 Preloader/Unity Mono compatibility failure, not a missing `winhttp.dll`, missing target assembly, or disabled Doorstop. `BepInEx/LogOutput.log`, `config/`, and `plugins/` were not generated.
 - The ignored evidence file is `data/probe/BEPINEX_BOOT_DIAGNOSTIC.json`. No verbose Doorstop replacement, configuration edit, SDK installation, Bridge build, plugin copy, telemetry enablement, or input occurred.
 
+## 2026-09-06 — V2.3X4-B Exact Unity Corlib Compatibility Test preparation
+
+- Preserved the original `Song_Data\\Managed` core files. Before the override, hashes were: `mscorlib.dll` `FC5B144B...4EA92CB`, `System.dll` `1252E720...78044E8`, `System.Core.dll` `A9A106E0...B77FC37`; `netstandard.dll` was absent.
+- Downloaded the official `https://unity.bepinex.dev/corlibs/2022.3.62.zip` to staging only. Size is `5,829,157` bytes, SHA-256 is `15188999DF738E665AAFFD0C924AF16FC449B0B76808E1C035552D3663293943`, and it contains 15 files including all required core assemblies.
+- Used `dnfile`/`pefile` only as a metadata reader against the staged `mscorlib.dll`; the assembly was not loaded or executed. `System.Reflection.Module.GetPEKind` is present with two `out` parameters (`peKind`, `machine`), metadata signature `2002011011a2781011a224`.
+- Backed up `doorstop_config.ini` with before-hash `4D5C6DFA...3CE73CFC`, copied only the 15 official corlibs into the new `BepInEx\\unstripped_corlib` directory, and changed only `UnityMono.dll_search_path_override` to `BepInEx\\unstripped_corlib`. The after-hash is `5721896C...29FE277`; line diff confirms one setting changed.
+- The game was not restarted after the override. The next step is a user-launched read-only boot check; do not install Bridge, enable telemetry, or run input before that result.
+
 - Use Python 3.11+ with a standard-library-first core to keep local/offline setup portable.
 - Use SQLite for durable local state and an append-only audit trail.
 - Use typed dataclasses and JSON validation at boundaries instead of passing arbitrary model output to an executor.

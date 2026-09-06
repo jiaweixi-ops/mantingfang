@@ -313,6 +313,13 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Found the first concrete failure in `preloader_20260906_182826_640.log`: BepInEx Preloader throws `System.MissingMethodException` for `System.Reflection.Module.GetPEKind(...)` under the game's Unity Mono runtime. `BEPINEX_BOOT=FAIL`; Bridge build/load and `/health`/`/state` remain blocked.
 - No configuration or game-file changes were made during diagnosis; no SDK was installed, no Bridge DLL was built/copied, and no Live/input/save/memory operation occurred.
 
+## 2026-09-06 — V2.3X4-B corlib override prepared
+
+- Downloaded and staged official Unity 2022.3.62 corlibs; ZIP hash and complete 15-entry inventory are recorded in the ignored `data/probe/V2.3X4B_corlib_manifest.json`.
+- Metadata-only inspection confirmed the staged `System.Reflection.Module.GetPEKind(out peKind, out machine)` method without loading the assembly.
+- Backed up `doorstop_config.ini`, created `BepInEx\\unstripped_corlib`, copied the 15 official files, and changed only `dll_search_path_override`. `Song_Data\\Managed` was not overwritten.
+- Preparation is complete and intentionally paused before restart. Awaiting the user's next game launch for the read-only BepInEx boot verdict.
+
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 
 - Fixed `TryReadResource` to use the cached reader instance instead of calling instance reflection from a static method.
