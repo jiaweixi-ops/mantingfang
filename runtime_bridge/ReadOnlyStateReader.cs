@@ -12,6 +12,27 @@ namespace MantingfangTelemetryBridge;
 internal sealed class ReadOnlyStateReader
 {
     private static readonly string[] RootTypeNames = { "RootData", "DataComponent", "BaseData" };
+    private readonly Dictionary<string, Type?> typeCache = new();
+    private readonly Dictionary<string, MemberAccessor?> memberCache = new();
+    private readonly Dictionary<Type, Func<object?>?> singletonAccessorCache = new();
+
+    private sealed class MemberAccessor
+    {
+        private readonly PropertyInfo? property;
+        private readonly FieldInfo? field;
+
+        internal MemberAccessor(PropertyInfo property) { this.property = property; }
+        internal MemberAccessor(FieldInfo field) { this.field = field; }
+
+        internal object? Read(object target)
+        {
+            try
+            {
+                return property is not null ? property.GetValue(target) : field?.GetValue(target);
+            }
+            catch { return null; }
+        }
+    }
 
     public object Read()
     {
@@ -121,7 +142,7 @@ internal sealed class ReadOnlyStateReader
         catch { return false; }
     }
 
-    private static object? ReadBuildMenuOpen()
+    private object? ReadBuildMenuOpen()
     {
         Type? type = FindType("UIBuildMenuViewCtrl");
         object? instance = type is null ? null : FindSingleton(type);
@@ -136,7 +157,7 @@ internal sealed class ReadOnlyStateReader
         ["observed_at"] = DateTime.UtcNow.ToString("O"),
     };
 
-    private static object? FindRoot()
+    private object? FindRoot()
     {
         foreach (string name in RootTypeNames)
         {
@@ -150,43 +171,71 @@ internal sealed class ReadOnlyStateReader
         return null;
     }
 
-    private static Type? FindType(string name) => AppDomain.CurrentDomain.GetAssemblies()
-        .SelectMany(SafeTypes).FirstOrDefault(type => type.Name == name || type.FullName == $"WSFramework.{name}");
+    private Type? FindType(string name)
+    {
+        if (typeCache.TryGetValue(name, out Type? cached)) return cached;
+        Type? type = AppDomain.CurrentDomain.GetAssemblies()
+            .SelectMany(SafeTypes).FirstOrDefault(candidate => candidate.Name == name || candidate.FullName == $"WSFramework.{name}");
+        typeCache[name] = type;
+        return type;
+    }
 
     private static IEnumerable<Type> SafeTypes(Assembly assembly)
     {
         try { return assembly.GetTypes(); } catch (ReflectionTypeLoadException ex) { return ex.Types.Where(type => type is not null)!; }
     }
 
-    private static object? FindSingleton(Type type)
+    private object? FindSingleton(Type type)
     {
-        foreach (string name in new[] { "Instance", "instance", "Current", "Data", "RootData" })
+        if (!singletonAccessorCache.TryGetValue(type, out Func<object?>? accessor))
         {
-            PropertyInfo? property = type.GetProperty(name, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            if (property is not null && property.GetIndexParameters().Length == 0)
+            foreach (string name in new[] { "Instance", "instance", "Current", "Data", "RootData" })
             {
-                try { if (property.GetValue(null) is object value) return value; } catch { }
+                PropertyInfo? property = type.GetProperty(name, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                if (property is not null && property.GetIndexParameters().Length == 0)
+                {
+                    accessor = () => ReadStaticProperty(property);
+                    break;
+                }
+                FieldInfo? field = type.GetField(name, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field is not null)
+                {
+                    accessor = () => ReadStaticField(field);
+                    break;
+                }
             }
-            FieldInfo? field = type.GetField(name, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-            if (field is not null)
-            {
-                try { if (field.GetValue(null) is object value) return value; } catch { }
-            }
+            singletonAccessorCache[type] = accessor;
         }
-        return null;
+        return accessor?.Invoke();
     }
 
-    private static object? GetMember(object target, string name)
+    private static object? ReadStaticProperty(PropertyInfo property)
     {
-        Type type = target.GetType();
-        try
+        try { return property.GetValue(null); } catch { return null; }
+    }
+
+    private static object? ReadStaticField(FieldInfo field)
+    {
+        try { return field.GetValue(null); } catch { return null; }
+    }
+
+    private object? GetMember(object target, string name)
+    {
+        string key = $"{target.GetType().AssemblyQualifiedName}|{name}";
+        if (!memberCache.TryGetValue(key, out MemberAccessor? accessor))
         {
+            Type type = target.GetType();
             PropertyInfo? property = type.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (property is not null && property.GetIndexParameters().Length == 0) return property.GetValue(target);
-            FieldInfo? field = type.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            return field?.GetValue(target);
+            if (property is not null && property.GetIndexParameters().Length == 0)
+                accessor = new MemberAccessor(property);
+            else
+            {
+                FieldInfo? field = type.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field is not null) accessor = new MemberAccessor(field);
+            }
+            memberCache[key] = accessor;
         }
-        catch { return null; }
+        return accessor?.Read(target);
     }
 
     private static string TypeName(object value) => value.GetType().Name;

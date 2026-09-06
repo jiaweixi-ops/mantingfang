@@ -277,6 +277,8 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Require `GOVERNOR_RUNTIME_GAME_VERSION` whenever runtime telemetry is enabled.
 - [x] Refresh observation cache after an opt-in foreground transition before resolving any live target.
 - [x] Add regression tests for schema, bridge contract, version gating, and foreground refresh ordering.
+- [x] Bound Bridge sampling to 4Hz and cache reflection metadata.
+- [x] Bind `telemetry-read` to the current Song PID and configured game version with exit code 2 on failure.
 
 ## V2.3X4 Runtime/Save Cross-check
 

@@ -57,6 +57,9 @@ The implementation must satisfy these constraints:
   core value must produce `UNKNOWN`;
 - sample Unity objects from `Plugin.Update` on the Unity main thread and let
   the HTTP worker return only the last serialized snapshot;
+- sample at a bounded 4 Hz interval by default and cache discovered types,
+  members, and singleton accessors; do not scan all loaded assemblies every
+  frame;
 - bind to loopback only and keep the HTTP surface to `/health` and `/state`;
 - do not log API keys, Feishu credentials, save contents, or full game objects.
 
@@ -77,6 +80,10 @@ assemblies and its returned fields are cross-checked against the saved city,
 the Python client must remain disabled (`GOVERNOR_RUNTIME_TELEMETRY=false`).
 When enabled for a verified build, `GOVERNOR_RUNTIME_GAME_VERSION` is required
 and must match the bridge snapshot.
+
+The `telemetry-read` CLI also locates the current Song window, binds the
+current Song PID, and requires the configured game version before accepting a
+snapshot. Any PID/version/staleness/schema failure returns exit code `2`.
 
 The V5 ZIP supplied during planning contains a reflective bridge prototype, but
 it depends on external BepInEx/Unity assemblies and is not a drop-in build for

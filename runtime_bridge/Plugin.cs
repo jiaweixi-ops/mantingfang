@@ -8,8 +8,10 @@ namespace MantingfangTelemetryBridge;
 [BepInPlugin("jiaweixi-ops.mantingfang.telemetry", "Mantingfang Read-only Telemetry", "0.1.0")]
 public sealed class Plugin : BaseUnityPlugin
 {
+    private const float SampleIntervalSeconds = 0.25f;
     private TelemetryServer? server;
     private readonly ReadOnlyStateReader reader = new();
+    private float nextSampleAt;
 
     private void Awake()
     {
@@ -20,6 +22,8 @@ public sealed class Plugin : BaseUnityPlugin
 
     private void Update()
     {
+        if (Time.unscaledTime < nextSampleAt) return;
+        nextSampleAt = Time.unscaledTime + SampleIntervalSeconds;
         try
         {
             // Unity objects are sampled only from the Unity main thread. The

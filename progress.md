@@ -288,3 +288,9 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Made opt-in auto-foreground a complete action transaction: foreground activation, fresh observation-cache invalidation, current-frame target resolution, input, and restoration are one boundary.
 - Added regression and source-contract checks; local verification is `116 passed`, compileall PASS, diff check PASS. The bridge remains unbuilt/uninjected because the required .NET/BepInEx/Unity SDK references are unavailable, and no Live E2E or game input was run.
 - GitHub Actions run `34025738670` passed Linux Python 3.11/3.12 and Windows Python 3.11/3.12.
+
+## 2026-09-06 — V2.3X3 final code-level closure
+
+- Runtime Bridge sampling is now bounded to 4Hz (`250ms`) on Unity's main thread, with cached type/member/singleton reflection metadata; the HTTP worker still serves only immutable serialized JSON.
+- `telemetry-read` now locates the current Song window, binds the current Song PID and required `GOVERNOR_RUNTIME_GAME_VERSION`, and returns exit code `2` for any connection, PID, version, stale, or schema failure.
+- Added CLI binding and reflection-cache contract tests. Local verification: `118 passed`, compileall PASS, diff check PASS. No Bridge build/injection, Live E2E, or game input was performed.

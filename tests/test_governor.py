@@ -26,7 +26,7 @@ from ai_governor.capture import (
 from ai_governor.input import DryRunInputAdapter, InputCommand, InputDisabled, InputError, WindowsSendInputAdapter
 from ai_governor.loop import CompositeObservationSource, GovernorLoop
 from ai_governor.config import Settings, load_persisted_settings, save_persisted_settings
-from ai_governor.cli import build_parser
+from ai_governor.cli import build_parser, main
 from ai_governor.qwen import QwenClient, QwenRequestError
 from ai_governor.e2e import (
     BuildMenuE2EHarness,
@@ -130,6 +130,42 @@ def test_runtime_telemetry_requires_game_version(monkeypatch: pytest.MonkeyPatch
     monkeypatch.delenv("GOVERNOR_RUNTIME_GAME_VERSION", raising=False)
     with pytest.raises(ValueError, match="GOVERNOR_RUNTIME_GAME_VERSION"):
         Settings.from_env()
+
+
+def test_telemetry_read_binds_current_song_pid_and_version(monkeypatch: pytest.MonkeyPatch, capsys) -> None:
+    class Backend:
+        def find_window(self, title): return 77
+        def is_window(self, hwnd): return True
+        def is_minimized(self, hwnd): return False
+        def restore(self, hwnd): pass
+        def client_rect(self, hwnd): return (0, 0, 100, 100)
+        def client_to_screen(self, hwnd, x, y): return (10 + x, 20 + y)
+        def foreground_window(self): return 77
+        def window_process_id(self, hwnd): return 1234
+        def window_title(self, hwnd): return "Song"
+        def process_name(self, pid): return "Song.exe"
+        def window_dpi(self, hwnd): return 96
+        def activate(self, hwnd): pass
+
+    captured = {}
+
+    class Client:
+        def __init__(self, base_url, **kwargs):
+            captured.update(kwargs)
+
+        def health(self):
+            return {"source": "runtime_bridge", "status": "OK"}
+
+        def read(self):
+            return {"source": "runtime_bridge", "status": "OK"}
+
+    monkeypatch.setattr("ai_governor.cli.Settings.from_env", lambda: Settings(runtime_game_version="1.0.0"))
+    monkeypatch.setattr("ai_governor.cli.Win32WindowBackend", lambda: Backend())
+    monkeypatch.setattr("ai_governor.telemetry.RuntimeTelemetryClient", Client)
+
+    assert main(["telemetry-read"]) == 0
+    assert captured == {"expected_pid": 1234, "expected_game_version": "1.0.0"}
+    assert '"status": "OK"' in capsys.readouterr().out
 
 
 def test_cli_exposes_overlay_command() -> None:

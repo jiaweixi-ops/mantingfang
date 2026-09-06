@@ -127,6 +127,7 @@ def build_parser() -> argparse.ArgumentParser:
     diagnostic.add_argument("--output-dir", default="data/e2e")
     probe = sub.add_parser("vision-probe", help="send a safe temporary PNG to the configured Qwen Vision model")
     telemetry = sub.add_parser("telemetry-read", help="read the configured local runtime telemetry bridge without input")
+    telemetry.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
     probe.add_argument("--out", help="optional safe probe PNG path")
     memory_read = sub.add_parser("memory-read", help="read only fields from an explicit memory profile")
     memory_read.add_argument("--profile", help="JSON memory profile; defaults to GOVERNOR_MEMORY_PROFILE")
@@ -137,7 +138,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    settings = Settings.from_env()
+    try:
+        settings = Settings.from_env()
+    except (OSError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
     if args.db:
         from dataclasses import replace
         settings = replace(settings, db_path=Path(args.db))
@@ -145,9 +150,22 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "telemetry-read":
         from .telemetry import RuntimeTelemetryClient, RuntimeTelemetryError
         try:
-            client = RuntimeTelemetryClient(settings.runtime_bridge_url)
+            if not settings.runtime_game_version:
+                raise RuntimeConfigurationError(
+                    "GOVERNOR_RUNTIME_GAME_VERSION is required for telemetry-read"
+                )
+            window = SteamWindowAdapter(args.title or settings.game_window_title, Win32WindowBackend())
+            info = window.locate()
+            game_pid = window.backend.window_process_id(info.hwnd)
+            if game_pid is None:
+                raise RuntimeConfigurationError("telemetry-read requires a readable Song PID")
+            client = RuntimeTelemetryClient(
+                settings.runtime_bridge_url,
+                expected_pid=game_pid,
+                expected_game_version=settings.runtime_game_version,
+            )
             print(json.dumps({"health": client.health(), "state": client.read()}, ensure_ascii=False, indent=2))
-        except RuntimeTelemetryError as exc:
+        except (RuntimeTelemetryError, RuntimeConfigurationError, WindowError, OSError) as exc:
             print(json.dumps({"status": "UNKNOWN", "error": str(exc)}, ensure_ascii=False))
             return 2
         return 0

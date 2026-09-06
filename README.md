@@ -105,6 +105,8 @@ py -3 -m ai_governor.cli telemetry-read
 
 桥接协议和 Unity Mono 适配边界记录在 `runtime_bridge/README.md`。当前仓库包含只读桥接参考源码，但不携带 BepInEx/Unity 第三方运行时依赖，也不会自动注入游戏进程；必须先由用户在本机完成版本匹配的只读桥接，再开启 `GOVERNOR_RUNTIME_TELEMETRY=true`，并同时配置已验证的 `GOVERNOR_RUNTIME_GAME_VERSION`。遥测必须返回 `game_pid`、`game_version` 和带时区的 `observed_at`；Python 客户端会拒绝 PID/版本不匹配、超过 2 秒的旧快照，以及包含空值或错误类型的核心字段。
 
+`telemetry-read` 会先定位当前 Song 窗口并读取 Song PID，再用 `GOVERNOR_RUNTIME_GAME_VERSION` 对 Bridge 快照做 PID/版本绑定；任何定位、连接、过期或 schema 失败都会以退出码 `2` fail closed。Bridge 主线程默认以 4Hz 采样并缓存反射元数据，HTTP 线程只返回最后一个序列化快照。
+
 只读真实 Steam 预检可以等待用户自行把游戏置于前台；程序不抢焦点、不发送输入：
 
 ```powershell
