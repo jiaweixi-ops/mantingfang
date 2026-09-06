@@ -171,3 +171,51 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Add regression coverage for ROI membership, runtime-region wiring, resolver safety, and no calibration-bbox input fallback.
 - [x] Run pytest/compileall/diff check and perform only read-only resolver validation; never arm Live or run e2e-build-menu.
 - [x] Commit/push as `fix: align build menu calibration with runtime regions` and verify CI.
+
+## V2.3 Verified Live Build Menu Roundtrip (2026-09-06)
+
+- [x] Add an explicitly confirmed, two-click-only `closed -> open -> closed` Live E2E command.
+- [x] Require exact Song HWND foreground and stable PID immediately before every click; never focus or retry input.
+- [x] Require WGC capture, non-black frames, formal calibrated ROI targets, confidence >= 0.90, and post-action Vision verification.
+- [x] Persist roundtrip evidence and fail-closed reports for setup, Vision, capture, foreground, PID, and postcondition failures.
+- [x] Add a bounded dialog-schema retry that never emits input and never retries a click.
+- [x] Run pytest, compileall, and diff check before the authorized real attempt.
+- [x] Execute the authorized two-click roundtrip and inspect its evidence; do not proceed to placement/building.
+- [x] Fail closed after the first click when `build_menu_open` remained false; no close click or input retry was sent.
+
+## V2.3 Click Audit and Read-only Post-click Observation (2026-09-06)
+
+- [x] Compare the existing before/after screenshots and preserve the interpretation in a bounded audit artifact.
+- [x] Record calibrated/observed IDs, normalized bbox, client point, screen point, client origin, and DPI; generate an annotated screenshot.
+- [x] Explain `build_menu_toggle` -> `build_menu_open_control` as controlled semantic-role normalization with compatibility, not an unchecked coordinate fallback.
+- [x] Add structured post-click read-only checkpoints at 200/500/1000/2000ms for future authorized attempts; no input retry is attached to these checkpoints.
+- [x] Run pytest, compileall, and diff check after the audit changes.
+
+## V2.3B Input Injection Audit (2026-09-06)
+
+- [x] Audit the real Win32 input path without running Live E2E.
+- [x] Correct absolute mouse mapping for the virtual desktop instead of treating screen pixels as `0..65535` coordinates.
+- [x] Require cursor-position verification within 2px before mouse down.
+- [x] Require exact HWND/PID/foreground checks before mouse down and mouse up.
+- [x] Record `SendInput` return counts for move, down, and up, and fail closed on non-1 results.
+- [x] Keep the existing fallback only for test doubles; the production Win32 backend uses separate down/up calls with a 50ms interval.
+- [x] Add regression tests and run pytest, compileall, and diff check.
+- [ ] Run the separate one-click open-only Live diagnostic only after explicit user authorization.
+
+## V2.3C Open-only Live E2E (2026-09-06)
+
+- [x] Add a dedicated `e2e-build-menu-open-only` command with a hard maximum of one click.
+- [x] Disable close, placement, keyboard input, and click retry in this path.
+- [x] Reuse cursor/SendInput/foreground/PID audits and persist before/annotated/200/500/1000/2000ms evidence.
+- [x] Run the authorized open-only attempt; it stopped at the closed-state precondition because the menu was already open.
+- [x] Re-run only after the user manually returns the menu to closed; do not close it programmatically.
+- [x] V2.3C PASS: one audited click opened the menu and all four read-only checkpoints confirmed the open state.
+
+## V2.3C Acceptance (2026-09-06)
+
+- [x] Precondition closed, target confidence >= 0.90, valid bbox, exact Song HWND/PID/foreground.
+- [x] One click only; no retry, no close, no placement, no keyboard input.
+- [x] Cursor verification and `SendInput` down/up return counts passed.
+- [x] WGC and non-black capture passed at 200/500/1000/2000ms.
+- [x] Automatic disarm completed and evidence saved under `data/e2e/build_menu_open_only/`.
+- [ ] V2.3D close-only Live E2E remains pending.

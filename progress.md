@@ -140,3 +140,57 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - After relaunch, open-state formal calibration passed on Song HWND `526608`, PID `26320`, with `build_controls` close target confidence `0.90`; closed-state resolver passed on the same WGC client with `build_entry` entrance confidence `0.90`.
 - Final local verification after semantic-family compatibility: `89 passed, 1 skipped`; Python 3.11 `compileall` PASS; `git diff --check` PASS. No Live E2E, arm-live, or input was executed.
 - Delivery: commit `12e022a118537a0caf34c7a1f47b4dc6a7868630` pushed to `origin/main`; local and remote SHA match. GitHub Actions run `34006800721` passed on Python 3.11 and 3.12.
+
+# 2026-09-06 — V2.3 Live Roundtrip
+
+- Status: implementation and local verification complete; real controlled attempt pending.
+- Added `run_live_build_menu_roundtrip` and CLI command `e2e-build-menu-roundtrip --confirm-live-roundtrip`.
+- Safety contract: live mode plus runtime arming, exact Song HWND foreground, same PID, WGC/non-black capture, current calibrated target confidence >= 0.90, exactly one click per transition, and Vision postcondition checks.
+- Previous authorized attempts were fail-closed before any input: foreground timeout, then incomplete dialog Vision schema. Added one bounded dialog-schema retry and strengthened the prompt.
+- Verification: `92 passed, 1 skipped`; compileall PASS; `git diff --check` PASS.
+- Next action: execute one authorized two-click roundtrip only, then inspect `data/e2e/build_menu_roundtrip.json` and phase PNGs. No placement/building.
+
+## 2026-09-06 — Live Attempt Closed Safely
+
+- Result: FAIL, stopped after one input. The exact foreground HWND/PID and WGC capture gates passed, but the menu did not visibly open after the first click.
+- `total_inputs=1`, `unexpected_inputs=0`, `retry_input=false`; no close click, no placement, and no further game input.
+- Final database state: `live_armed=false`.
+- Evidence: `data/e2e/build_menu_roundtrip.json`, `data/e2e/build_menu_roundtrip_closed_before.png`, and `data/e2e/build_menu_roundtrip_open_after.png`.
+
+## 2026-09-06 — Read-only Click Audit
+
+- Existing screenshot comparison completed; the map remained visible and no build-menu panel appeared after the first click.
+- Click audit completed for bbox `[0.772, 0.08775, 0.7952, 0.12285]`: client `(1003,101)`, screen `(1101,191)`, origin `(98,90)`, DPI `96`.
+- Target drift explained: persisted calibration uses the toggle role/ID, while current Vision assigns the explicit open role/ID; compatibility is role-scoped and recorded.
+- Added structured read-only checkpoints at 200ms, 500ms, 1000ms, and 2000ms to future post-click verification. No Live E2E was rerun.
+- Verification after changes: `93 passed, 1 skipped`; compileall PASS; diff check PASS.
+
+## 2026-09-06 — Input Injection Audit Complete
+
+- Implemented and tested the input audit layer only; no Live command was run.
+- Corrected `SendInput` absolute mapping for multi-monitor virtual desktops.
+- Added cursor-position verification, separate mouse down/up calls, 50ms down/up interval, foreground/PID rechecks, and return-count reporting.
+- Verification: `95 passed, 1 skipped`; compileall PASS; diff check PASS.
+- Next gated action remains a separate open-only Live diagnostic with a maximum of one click, pending explicit authorization.
+
+## 2026-09-06 — V2.3C Open-only Attempt
+
+- Open-only command and tests are complete: `97 passed, 1 skipped`; compileall PASS; diff check PASS.
+- The authorized real attempt stopped before input because the menu was already open at precondition time.
+- `total_inputs=0`; final `live_armed=false`. No close or placement input was sent.
+- Next action is user-side only: manually close the build menu, then explicitly authorize one new open-only attempt.
+
+## 2026-09-06 — Open-only UI Visibility Blocker
+
+- The retry reached Song foreground but stopped before input because F2 had hidden the full HUD, including the calibrated build entry and bottom construction UI.
+- `total_inputs=0`; final `live_armed=false`.
+- User action required: press F2 once to restore HUD visibility, then authorize the open-only attempt again.
+
+## 2026-09-06 — V2.3C PASS
+
+- Open-only Live E2E passed after HUD restoration.
+- Exactly one audited click was sent; all four read-only checkpoints reported `build_menu_open=true`.
+- Input audit: cursor move verified, down/up return counts both `1`, foreground and PID stable.
+- No close action, placement action, keyboard input, or retry occurred. Runtime disarmed automatically.
+- Evidence: `data/e2e/build_menu_open_only/result.json`, `before_annotated.png`, and `after_200ms.png` through `after_2000ms.png`.
+- Next gated phase: V2.3D close-only; do not start it automatically.

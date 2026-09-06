@@ -71,6 +71,59 @@
 - The existing desktop shortcut launched `cli run` directly, so it required DeepSeek model environment variables and had no settings UI. The overlay should own the user-facing configuration flow and persist only local settings outside the repository.
 - A standard-library Tkinter overlay can use Win32 `RegisterHotKey(Home)` for a global toggle and `SteamWindowAdapter`/`Win32WindowBackend` to follow the game client area; it must remain topmost and keep live input opt-in.
 
+## 2026-09-06 — V2.3 Live Roundtrip Preparation
+
+- Added a controlled `e2e-build-menu-roundtrip` path with an explicit confirmation flag and a hard maximum of two high-level clicks.
+- Live input remains protected by exact foreground HWND and expected Song PID checks; no focus activation, keyboard input, placement, or automatic retry is permitted.
+- The first authorized attempt stopped before input on `FOREGROUND_TIMEOUT`; the second reached the read-only Vision phase but stopped before input because DeepSeek returned a dialog object without the required `ui_elements` list.
+- The dialog request now has one bounded schema retry with an explicit four-field contract. This retry is Vision-only and does not retry or emit any input.
+- Pre-attempt verification after the schema fix: `92 passed, 1 skipped`; Python 3.11 compileall PASS; diff check PASS.
+
+## 2026-09-06 — V2.3 Live Attempt Result
+
+- The authorized run passed the exact Song HWND/PID foreground gate, WGC capture, `near_black_frame=false`, and the closed-state target gate at confidence `0.90`.
+- Exactly one click was emitted for `build_menu_open_control`; the post-click WGC/Vision check still reported `build_menu_open=false`.
+- The harness stopped immediately with `open_after_click state precondition mismatch`; the close click was not attempted and no input retry occurred.
+- Evidence is in `data/e2e/build_menu_roundtrip.json` and `data/e2e/build_menu_roundtrip_open_after.png`. The frame is a normal Song game client with the menu still closed.
+- Temporary runtime arming was reset to `live_armed=false`; no placement/building action was performed.
+
+## 2026-09-06 — Click Audit and Multi-frame Verification
+
+- The existing closed-before and open-after frames are both normal Song client frames. The post-click frame still shows the map and the same upper-right entrance icon; no build-menu panel is visible.
+- Raw pixel comparison reports `1,096,283 / 1,228,800` changed pixels (`89.22%`) and mean absolute RGB sum `12.36`; the files were captured about 16 seconds apart, so animated water/map markers account for substantial difference. This is not evidence that the menu opened.
+- The actual target chain was: normalized bbox `[0.772, 0.08775, 0.7952, 0.12285]` -> client `(1003,101)` -> screen `(1101,191)`, client origin `(98,90)`, DPI `96`.
+- Calibration stores `build_menu_toggle` with role `BUILD_MENU_TOGGLE`; current Vision returned raw `build_entry_blue_icon`, role `BUILD_MENU_OPEN`, normalized as `build_menu_open_control`. The resolver intentionally accepts this toggle/open semantic family, so the ID change is role normalization, not a coordinate fallback.
+- Runtime now records both ID contracts and click geometry, writes annotated click screenshots, and collects read-only post-click frames at 200/500/1000/2000ms before accepting a state transition. No additional input was sent during this audit.
+
+## 2026-09-06 — V2.3B Input Injection Audit
+
+- The previous Win32 absolute mapping used screen pixels directly in the `0..65535` fields, which is incorrect for `MOUSEEVENTF_ABSOLUTE`. The production backend now maps against the virtual desktop origin/extent and sets `MOUSEEVENTF_VIRTUALDESK`.
+- The live adapter records requested screen point, cursor-before, cursor-after-move, move return count, and separate mouse down/up return counts. A cursor mismatch over 2px or any non-1 `SendInput` return fails closed with an explicit error.
+- Foreground and expected PID are rechecked before mouse down and before mouse up. No focus activation is performed.
+- The real Win32 path uses separate down/up calls with a 50ms interval. Test doubles retain a compatibility `mouse_click` fallback only so existing non-Windows tests remain isolated from real input.
+- Verification: `95 passed, 1 skipped`; Python 3.11 compileall PASS; `git diff --check` PASS. No Live E2E and no game input were executed in this audit.
+
+## 2026-09-06 — V2.3C Open-only Attempt
+
+- Added `e2e-build-menu-open-only` with `max_clicks=1`, `retry_input=false`, close/placement disabled, and automatic disarm in `finally`.
+- The authorized attempt located Song HWND `526608`, PID `26320`, but read-only precondition Vision reported `build_menu_open=true`.
+- It failed closed before target click: `total_inputs=0`, `unexpected_inputs=0`, no close action, no placement, and final `live_armed=false`.
+- A new attempt requires the user to manually close the build menu first; the tool will not send a close input as part of open-only diagnosis.
+
+## 2026-09-06 — V2.3C UI Visibility Precondition
+
+- A second open-only attempt passed the Song foreground wait but stopped before input because the calibrated OPEN target was not visible/resolvable.
+- The fresh `data/e2e/build_menu_open_only/before.png` shows the game map with the HUD hidden: the upper-right build entry and bottom construction toolbar are absent.
+- This confirms `F2` toggles the game HUD/UI visibility rather than merely closing the build menu. The next attempt requires the user to press `F2` once to restore the HUD; the tool will not send that key.
+
+## 2026-09-06 — V2.3C PASS
+
+- After the HUD was restored and Song was kept foreground during the wait, the open-only path passed with exactly one click.
+- Game identity remained HWND `526608`, PID `26320`, resolution `1280x960`; WGC capture remained healthy and `near_black_frame=false`.
+- Input audit passed: requested/actual screen point `[1158,125]`, cursor verification true, `mouse_down.return_count=1`, `mouse_up.return_count=1`, foreground/PID checks true before both edges.
+- Read-only Vision observed `build_menu_open=true` at 200ms, 500ms, 1000ms, and 2000ms; no unexpected dialog was reported.
+- The open menu screenshot visibly shows the construction panel. No close, placement, keyboard, or retry input was performed; final `live_armed=false`.
+
 - Use Python 3.11+ with a standard-library-first core to keep local/offline setup portable.
 - Use SQLite for durable local state and an append-only audit trail.
 - Use typed dataclasses and JSON validation at boundaries instead of passing arbitrary model output to an executor.

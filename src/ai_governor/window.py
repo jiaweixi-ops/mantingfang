@@ -35,6 +35,7 @@ class WindowBackend(Protocol):
     def window_process_id(self, hwnd: int) -> int | None: ...
     def window_title(self, hwnd: int) -> str: ...
     def process_name(self, pid: int | None) -> str | None: ...
+    def window_dpi(self, hwnd: int) -> int: ...
 
 
 @dataclass(frozen=True)
@@ -185,6 +186,16 @@ class Win32WindowBackend:
             return buffer.value.rsplit("\\", 1)[-1]
         finally:
             self.kernel32.CloseHandle(handle)
+
+    def window_dpi(self, hwnd: int) -> int:
+        """Return the effective DPI for a window without changing its state."""
+        try:
+            get_dpi = self.user32.GetDpiForWindow
+        except AttributeError:
+            return 96
+        get_dpi.argtypes = [ctypes.c_void_p]
+        get_dpi.restype = wintypes.UINT
+        return int(get_dpi(ctypes.c_void_p(hwnd))) or 96
 
 
 @dataclass

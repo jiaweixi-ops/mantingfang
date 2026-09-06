@@ -23,7 +23,7 @@ from ai_governor.capture import (
     encode_rgba_png,
     is_near_black_frame,
 )
-from ai_governor.input import DryRunInputAdapter, InputCommand, InputDisabled, WindowsSendInputAdapter
+from ai_governor.input import DryRunInputAdapter, InputCommand, InputDisabled, InputError, WindowsSendInputAdapter
 from ai_governor.loop import CompositeObservationSource, GovernorLoop
 from ai_governor.config import Settings, load_persisted_settings, save_persisted_settings
 from ai_governor.cli import build_parser
@@ -31,8 +31,11 @@ from ai_governor.deepseek import DeepSeekClient, DeepSeekRequestError
 from ai_governor.e2e import (
     BuildMenuE2EHarness,
     E2EConfigurationError,
+    _roundtrip_click_audit,
     calibrated_runtime_regions,
     finalize_build_menu_calibration,
+    run_live_build_menu_open_only,
+    run_live_build_menu_roundtrip,
     run_read_only_preflight,
 )
 from ai_governor.events import MajorEventCoordinator, MajorEventDetector
@@ -123,6 +126,30 @@ def test_persisted_deepseek_settings_round_trip_and_env_override(tmp_path: Path,
 def test_cli_exposes_overlay_command() -> None:
     args = build_parser().parse_args(["overlay"])
     assert args.command == "overlay"
+
+
+def test_cli_exposes_guarded_live_roundtrip_command() -> None:
+    args = build_parser().parse_args(["e2e-build-menu-roundtrip", "--confirm-live-roundtrip"])
+    assert args.command == "e2e-build-menu-roundtrip"
+    assert args.confirm_live_roundtrip is True
+
+
+def test_cli_exposes_guarded_open_only_command() -> None:
+    args = build_parser().parse_args(["e2e-build-menu-open-only", "--confirm-live-open"])
+    assert args.command == "e2e-build-menu-open-only"
+    assert args.confirm_live_open is True
+
+
+def test_open_only_requires_live_mode_before_window_or_input(store: SQLiteStore, tmp_path: Path) -> None:
+    settings = Settings(db_path=tmp_path / "open-only.db", deepseek_api_key="test", deepseek_vision_model="vision")
+    with pytest.raises(E2EConfigurationError, match="live mode"):
+        run_live_build_menu_open_only(settings, store, output_dir=tmp_path / "open-only")
+
+
+def test_live_roundtrip_requires_live_mode_before_window_or_input(store: SQLiteStore, tmp_path: Path) -> None:
+    settings = Settings(db_path=tmp_path / "roundtrip.db", deepseek_api_key="test", deepseek_vision_model="vision")
+    with pytest.raises(E2EConfigurationError, match="live mode"):
+        run_live_build_menu_roundtrip(settings, store, output_dir=tmp_path / "e2e")
 
 
 def test_deepseek_client_rejects_negative_retry_count() -> None:
@@ -1111,12 +1138,40 @@ class FakeWindowBackend:
     def process_name(self, pid: int | None):
         return {39408: "Song.exe", 12116: "ChatGPT.exe"}.get(pid)
 
+    def window_dpi(self, hwnd: int):
+        return 120
+
 
 def test_window_adapter_returns_client_geometry_and_normalized_point() -> None:
     info = SteamWindowAdapter("满庭芳：宋上繁华", FakeWindowBackend()).locate()
     assert info.client_width == 1920
     assert info.client_height == 1080
     assert info.screen_point(0.5, 0.5) == (1060, 590)
+
+
+def test_roundtrip_click_audit_records_client_screen_origin_dpi_and_id_mapping() -> None:
+    backend = FakeWindowBackend()
+    info = SteamWindowAdapter("满庭芳：宋上繁华", backend).locate()
+    observed = {
+        "id": "build_menu_open_control",
+        "canonical_id": "build_menu_open_control",
+        "raw_id": "build_entry_blue_icon",
+        "role": "BUILD_MENU_OPEN",
+        "label": "建筑菜单",
+        "confidence": 0.90,
+        "global_bbox": [0.772, 0.08775, 0.7952, 0.12285],
+    }
+    calibrated = {
+        "region": "build_entry",
+        "canonical_id": "build_menu_toggle",
+        "role": "BUILD_MENU_TOGGLE",
+    }
+    audit = _roundtrip_click_audit(info, backend, observed, calibrated)
+    assert audit["client_point"] == [1505, 114]
+    assert audit["client_origin"] == [100, 50]
+    assert audit["screen_point"] == [1605, 164]
+    assert audit["dpi"] == 120
+    assert audit["id_mapping"] == {"compatible": True, "reason": "semantic_role_compatibility"}
 
 
 def test_window_adapter_can_restore_minimized_window() -> None:
@@ -1368,6 +1423,30 @@ def test_live_input_refuses_non_foreground_window() -> None:
         adapter.execute(InputCommand("click", 0.5, 0.5))
 
 
+def test_live_input_refuses_pid_change_before_emitting_input() -> None:
+    class Backend:
+        def move_absolute(self, x, y):
+            raise AssertionError("input must not be emitted")
+
+        def mouse_click(self):
+            raise AssertionError("input must not be emitted")
+
+        def key(self, virtual_key, down):
+            raise AssertionError("input must not be emitted")
+
+    window_backend = FakeWindowBackend()
+    window_backend.foreground = 99
+    adapter = WindowsSendInputAdapter(
+        SteamWindowAdapter("满庭芳：宋上繁华", window_backend),
+        Backend(),
+        enabled=True,
+        allow_clicks=True,
+        expected_pid=99999,
+    )
+    with pytest.raises(InputError, match="PID changed"):
+        adapter.execute(InputCommand("click", 0.5, 0.5))
+
+
 def test_live_input_accepts_exact_game_foreground_with_fake_backend() -> None:
     calls = []
 
@@ -1391,6 +1470,75 @@ def test_live_input_accepts_exact_game_foreground_with_fake_backend() -> None:
     result = adapter.execute(InputCommand("click", 0.5, 0.5))
     assert result["simulated"] is False
     assert calls[-1] == ("click",)
+
+
+def test_live_input_records_cursor_and_sendinput_counts() -> None:
+    class AuditedBackend:
+        def __init__(self):
+            self.cursor = [0, 0]
+            self.calls = []
+
+        def move_absolute(self, x, y):
+            self.cursor = [x, y]
+            self.calls.append(("move", x, y))
+            return 1
+
+        def cursor_position(self):
+            return tuple(self.cursor)
+
+        def mouse_down(self):
+            self.calls.append(("down",))
+            return 1
+
+        def mouse_up(self):
+            self.calls.append(("up",))
+            return 1
+
+        def key(self, virtual_key, down):
+            return 1
+
+    backend = AuditedBackend()
+    adapter = WindowsSendInputAdapter(
+        SteamWindowAdapter("满庭芳：宋上繁华", FakeWindowBackend()),
+        backend,
+        enabled=True,
+        allow_clicks=True,
+    )
+    result = adapter.execute(InputCommand("click", 0.5, 0.5))
+    audit = result["input_audit"]
+    assert audit["requested_screen_point"] == [1060, 590]
+    assert audit["cursor_after_move"] == [1060, 590]
+    assert audit["move_verified"] is True
+    assert audit["mouse_down"] == {"sent": True, "return_count": 1}
+    assert audit["mouse_up"] == {"sent": True, "return_count": 1}
+    assert backend.calls == [("move", 1060, 590), ("down",), ("up",)]
+
+
+def test_live_input_blocks_cursor_position_mismatch_before_click() -> None:
+    class MismatchBackend:
+        def move_absolute(self, x, y):
+            return 1
+
+        def cursor_position(self):
+            return (0, 0)
+
+        def mouse_down(self):
+            raise AssertionError("mouse down must not be emitted")
+
+        def mouse_up(self):
+            raise AssertionError("mouse up must not be emitted")
+
+        def key(self, virtual_key, down):
+            return 1
+
+    adapter = WindowsSendInputAdapter(
+        SteamWindowAdapter("满庭芳：宋上繁华", FakeWindowBackend()),
+        MismatchBackend(),
+        enabled=True,
+        allow_clicks=True,
+    )
+    with pytest.raises(InputError, match="CURSOR_POSITION_MISMATCH"):
+        adapter.execute(InputCommand("click", 0.5, 0.5))
 
 
 def test_screenshot_verifier_confirms_window_and_capture() -> None:

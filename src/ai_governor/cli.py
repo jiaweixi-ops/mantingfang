@@ -23,6 +23,8 @@ from .e2e import (
     calibrate_build_menu_state,
     calibrated_runtime_regions,
     resolve_build_menu_target,
+    run_live_build_menu_open_only,
+    run_live_build_menu_roundtrip,
     run_read_only_preflight,
 )
 from .feishu import CommandRouter
@@ -83,6 +85,20 @@ def build_parser() -> argparse.ArgumentParser:
     resolver.add_argument("--state", choices=("open", "closed"), required=True)
     resolver.add_argument("--output-dir", default="data/e2e")
     resolver.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
+    roundtrip = sub.add_parser("e2e-build-menu-roundtrip", help="run one guarded closed-open-closed Live build-menu roundtrip")
+    roundtrip.add_argument("--confirm-live-roundtrip", action="store_true", help="required confirmation before the two real clicks")
+    roundtrip.add_argument("--output-dir", default="data/e2e")
+    roundtrip.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
+    roundtrip.add_argument("--verify-timeout-seconds", type=float, default=5.0)
+    roundtrip.add_argument("--poll-seconds", type=float, default=0.25)
+    roundtrip.add_argument("--wait-for-game-foreground", action="store_true", help="wait without focusing until Song is foreground for 3 seconds")
+    open_only = sub.add_parser("e2e-build-menu-open-only", help="run one guarded Live click to open the build menu; never close or place")
+    open_only.add_argument("--confirm-live-open", action="store_true", help="required confirmation before the one real click")
+    open_only.add_argument("--output-dir", default="data/e2e/build_menu_open_only")
+    open_only.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
+    open_only.add_argument("--verify-timeout-seconds", type=float, default=5.0)
+    open_only.add_argument("--poll-seconds", type=float, default=0.25)
+    open_only.add_argument("--wait-for-game-foreground", action="store_true", help="wait without focusing until Song is foreground for 3 seconds")
     preflight = sub.add_parser("e2e-preflight", help="run read-only Steam capture and Vision preflight")
     preflight.add_argument("--wait-for-game-foreground", action="store_true", help="wait up to 30 seconds for Song to remain foreground for 3 seconds")
     preflight.add_argument("--timeout-seconds", type=float, default=30.0)
@@ -377,6 +393,44 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result.get("found") else 2
+        if args.command == "e2e-build-menu-roundtrip":
+            if not args.confirm_live_roundtrip:
+                print("ERROR: real roundtrip requires --confirm-live-roundtrip", file=sys.stderr)
+                return 2
+            try:
+                result = run_live_build_menu_roundtrip(
+                    settings,
+                    store,
+                    output_dir=Path(args.output_dir),
+                    window_title=args.title,
+                    verify_timeout_seconds=args.verify_timeout_seconds,
+                    poll_seconds=args.poll_seconds,
+                    wait_for_game_foreground=args.wait_for_game_foreground,
+                )
+            except (E2EConfigurationError, E2EPreflightError, DeepSeekConfigurationError, WindowError, CaptureError, OSError, ValueError) as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result.get("result") == "PASS" else 2
+        if args.command == "e2e-build-menu-open-only":
+            if not args.confirm_live_open:
+                print("ERROR: open-only live diagnostic requires --confirm-live-open", file=sys.stderr)
+                return 2
+            try:
+                result = run_live_build_menu_open_only(
+                    settings,
+                    store,
+                    output_dir=Path(args.output_dir),
+                    window_title=args.title,
+                    verify_timeout_seconds=args.verify_timeout_seconds,
+                    poll_seconds=args.poll_seconds,
+                    wait_for_game_foreground=args.wait_for_game_foreground,
+                )
+            except (E2EConfigurationError, E2EPreflightError, DeepSeekConfigurationError, WindowError, CaptureError, OSError, ValueError) as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result.get("result") == "PASS" else 2
         if args.command == "e2e-preflight":
             try:
                 result = run_read_only_preflight(
