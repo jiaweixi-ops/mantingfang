@@ -164,6 +164,7 @@
 - No `BepInEx` directory, `BepInEx.dll`, `winhttp.dll`, or `doorstop_config.ini` exists under the game directory. `Song.exe` was not running during the check.
 - The previously captured city save remains available as ignored copies under `data/probe/117224508162075/`, and the original save tree still contains the corresponding `.index`/`.record` pair. No original save was written.
 - Production Bridge build/load and `/health`/`/state` verification are blocked until a version-compatible BepInEx/loader is deliberately installed and the game is running. Do not guess a loader version or install it automatically.
+- The user later started the game; a read-only check found `Song.exe` responding at PID `23392`, HWND `30738232`, with the same Unity `2022.3.62f2` build. BepInEx/Doorstop markers remain absent and loopback port `18765` has no listener, so the Bridge is not loaded.
 
 - Use Python 3.11+ with a standard-library-first core to keep local/offline setup portable.
 - Use SQLite for durable local state and an append-only audit trail.

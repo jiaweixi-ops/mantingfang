@@ -301,6 +301,7 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Confirmed no BepInEx/Doorstop loader is installed in the game directory, and `Song.exe` was not running. No installation, injection, process access, or game input was performed.
 - Confirmed the ignored city-save probe remains available under `data/probe/117224508162075/` for the later Runtime-vs-Save comparison.
 - X4 is blocked at the deliberate loader/build prerequisite. The next step requires a version-compatible loader decision and a running game; keep `GOVERNOR_RUNTIME_TELEMETRY=false`.
+- After the user started the game, read-only verification found responsive `Song.exe` PID `23392`, HWND `30738232`, and no listener on `127.0.0.1:18765`. BepInEx/Doorstop is still absent; no focus change, injection, input, or game-file modification was performed.
 
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 
