@@ -96,7 +96,7 @@ internal sealed class ReadOnlyStateReader
         };
     }
 
-    private static bool TryReadResource(object resources, int wantedId, out object amount)
+    private bool TryReadResource(object resources, int wantedId, out object amount)
     {
         foreach (object item in Enumerate(resources))
         {
@@ -176,7 +176,8 @@ internal sealed class ReadOnlyStateReader
         if (typeCache.TryGetValue(name, out Type? cached)) return cached;
         Type? type = AppDomain.CurrentDomain.GetAssemblies()
             .SelectMany(SafeTypes).FirstOrDefault(candidate => candidate.Name == name || candidate.FullName == $"WSFramework.{name}");
-        typeCache[name] = type;
+        if (type is not null)
+            typeCache[name] = type;
         return type;
     }
 

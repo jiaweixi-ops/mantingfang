@@ -294,3 +294,10 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Runtime Bridge sampling is now bounded to 4Hz (`250ms`) on Unity's main thread, with cached type/member/singleton reflection metadata; the HTTP worker still serves only immutable serialized JSON.
 - `telemetry-read` now locates the current Song window, binds the current Song PID and required `GOVERNOR_RUNTIME_GAME_VERSION`, and returns exit code `2` for any connection, PID, version, stale, or schema failure.
 - Added CLI binding and reflection-cache contract tests. Local verification: `118 passed`, compileall PASS, diff check PASS. No Bridge build/injection, Live E2E, or game input was performed.
+
+## 2026-09-06 — V2.3X3 Bridge compile hardening
+
+- Fixed `TryReadResource` to use the cached reader instance instead of calling instance reflection from a static method.
+- Changed type discovery to cache only successful `Type` resolutions, so an early startup miss can be retried later.
+- Added `runtime_bridge/compile-check/` with minimal BepInEx, Unity, and serializer stubs, and added a GitHub Actions `dotnet build` job that compiles the real bridge source files without installing or injecting the plugin.
+- Local Python verification is pending this phase; the local machine has .NET runtimes but no SDK, so the C# compile check will be verified by CI. No Live E2E, `arm-live`, game input, process-memory write, or secret file was used.

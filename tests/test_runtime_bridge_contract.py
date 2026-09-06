@@ -32,3 +32,15 @@ def test_bridge_caches_reflection_metadata() -> None:
     assert "typeCache" in source
     assert "memberCache" in source
     assert "singletonAccessorCache" in source
+    assert "private bool TryReadResource" in source
+    assert "private static bool TryReadResource" not in source
+    assert "if (type is not null)" in source
+
+
+def test_bridge_compile_check_includes_real_sources_and_ci_step() -> None:
+    project = (ROOT / "runtime_bridge" / "compile-check" / "BridgeCompileCheck.csproj").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
+    assert "..\\Plugin.cs" in project
+    assert "..\\TelemetryServer.cs" in project
+    assert "..\\ReadOnlyStateReader.cs" in project
+    assert "dotnet build runtime_bridge/compile-check/BridgeCompileCheck.csproj" in workflow

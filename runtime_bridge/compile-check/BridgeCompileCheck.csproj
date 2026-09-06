@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AssemblyName>MantingfangTelemetryBridgeCompileCheck</AssemblyName>
+    <RootNamespace>MantingfangTelemetryBridgeCompileCheck</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\Plugin.cs" Link="Plugin.cs" />
+    <Compile Include="..\TelemetryServer.cs" Link="TelemetryServer.cs" />
+    <Compile Include="..\ReadOnlyStateReader.cs" Link="ReadOnlyStateReader.cs" />
+    <Compile Include="Stubs.cs" />
+  </ItemGroup>
+</Project>

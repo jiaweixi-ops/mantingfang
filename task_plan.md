@@ -279,6 +279,8 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Add regression tests for schema, bridge contract, version gating, and foreground refresh ordering.
 - [x] Bound Bridge sampling to 4Hz and cache reflection metadata.
 - [x] Bind `telemetry-read` to the current Song PID and configured game version with exit code 2 on failure.
+- [x] Fix the instance-only resource reader and avoid permanently caching missing reflection types.
+- [x] Add a dependency-free C# bridge source compile check with minimal BepInEx/Unity stubs and CI coverage.
 
 ## V2.3X4 Runtime/Save Cross-check
 

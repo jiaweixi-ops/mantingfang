@@ -74,6 +74,13 @@ dotnet build .\runtime_bridge\MantingfangTelemetryBridge.csproj `
   -p:UnityManagedPath='F:\SteamLibrary\steamapps\common\Thriving City Song\Song_Data\Managed'
 ```
 
+The repository also contains a dependency-free source compile check at
+`runtime_bridge/compile-check/`. It compiles the three bridge source files
+against minimal BepInEx/Unity/serializer stubs so CI can catch C# errors such as
+static/instance mismatches without pretending that the exact game assemblies
+are available. This check validates source syntax and contracts only; it does
+not build or inject a production plugin.
+
 The current installation has not been injected or modified automatically.
 Until this project is built against the exact installed BepInEx/Unity
 assemblies and its returned fields are cross-checked against the saved city,
