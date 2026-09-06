@@ -35,6 +35,22 @@ jobs:
       - name: Compile Runtime Bridge with safe stubs
         run: dotnet build runtime_bridge/compile-check/BridgeCompileCheck.csproj --configuration Release
 
+  mono-assembly-enumerator:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build minimal read-only Mono assembly enumerator
+        run: dotnet publish runtime_probe/MonoAssemblyEnumerator.csproj --configuration Release --output runtime_probe/publish/assembly-enumerator
+      - name: Publish Mono assembly enumerator artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MonoAssemblyEnumerator
+          path: runtime_probe/publish/assembly-enumerator/
+          if-no-files-found: error
+
   pytest:
     runs-on: ubuntu-latest
     strategy:

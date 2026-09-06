@@ -355,6 +355,12 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - There were zero established connections, so no debugger client was attached. Configuration hash remained `7F259C46FEA4EC8DE746854EB7F82E71FDE5B562CF30A912611CE89E24F0A682`.
 - Result: `DOORSTOP_DEBUGGER_TRANSPORT=PASS`. Stopped before V2.3X4-D; no assembly enumeration, runtime-field read, telemetry enablement, input, save write, or memory write occurred.
 
+## 2026-09-06 — V2.3X4-D client implementation pending CI
+
+- Added a minimal `net472` Mono Soft Debugger client with one hard-coded loopback connection, root-domain assembly-name enumeration, and one disconnect path.
+- Added a dedicated CI publish artifact plus source-contract tests that fail if prohibited debugger capabilities or retry loops enter the client.
+- Local verification: `123 passed`, Python compileall PASS, and diff check PASS. No debugger connection has occurred; execution is blocked until the pushed CI artifact is built, downloaded, and verified.
+
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 
 - Fixed `TryReadResource` to use the cached reader instance instead of calling instance reflection from a static method.

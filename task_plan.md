@@ -324,3 +324,14 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Confirm exactly one listener exists at `127.0.0.1:10000` and its owning PID exactly matches the current `Song.exe` PID.
 - [x] Re-check after a short interval and confirm there are no established debugger client connections.
 - [x] Record `DOORSTOP_DEBUGGER_TRANSPORT=PASS` and stop before any debugger client connection, assembly enumeration, or runtime-field access.
+
+## V2.3X4-D Mono debugger minimal read-only attachment
+
+- [x] Receive explicit authorization and re-confirm `Song.exe` plus loopback listener PID ownership.
+- [x] Add a single-purpose Mono Soft Debugger client restricted to one connect, root-domain assembly-name enumeration, and disconnect.
+- [x] Add source-contract tests that prohibit suspend, breakpoints, stepping, invocation, type/object/thread enumeration, field/local/stack reads, mutation, and reconnect loops.
+- [ ] Build and publish the exact Windows client in CI; do not substitute locally compiled source.
+- [ ] Download and verify the CI artifact, then audit its source commit and metadata before execution.
+- [ ] Execute at most one connection with a five-second outer timeout; save only assembly names and required-assembly booleans.
+- [ ] Confirm disconnect, zero established connections, unchanged PID/listener ownership, and a responsive game.
+- [ ] Record and push the result, then stop before V2.3X4-E.

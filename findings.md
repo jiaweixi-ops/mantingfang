@@ -203,6 +203,13 @@
 - The active Doorstop configuration remained unchanged at SHA-256 `7F259C46FEA4EC8DE746854EB7F82E71FDE5B562CF30A912611CE89E24F0A682`. The isolated no-op bootstrap therefore loads without preventing normal game startup and exposes only the loopback Mono debugger transport.
 - Verdict: `DOORSTOP_DEBUGGER_TRANSPORT=PASS`. No debugger client connected, no assembly or field was enumerated, and no runtime telemetry, input, save write, or memory write occurred.
 
+## 2026-09-06 — V2.3X4-D minimal client prepared
+
+- The authorized debugger operation is constrained to the documented Mono Soft Debugger path: connect once to loopback, request the root domain's loaded assembly IDs, request each assembly name, and disconnect.
+- Added a pinned `net472` client using `Mono.Debugger.Soft` `1.0.20170212.42`. Its endpoint is compile-time fixed to `IPAddress.Loopback:10000`; it accepts no endpoint arguments and contains no reconnect loop.
+- Added source-contract tests that reject suspend/resume, breakpoints, stepping, exception requests, type/thread/object/frame/value access, mutation APIs, and additional connection paths.
+- The exact client will be built and published by CI. It has not yet connected to the game. Local verification is `123 passed`, Python compileall PASS, and diff check PASS.
+
 ## 2026-09-06 — V2.3X4-B Exact Unity Corlib Compatibility Test preparation
 
 - Preserved the original `Song_Data\\Managed` core files. Before the override, hashes were: `mscorlib.dll` `FC5B144B...4EA92CB`, `System.dll` `1252E720...78044E8`, `System.Core.dll` `A9A106E0...B77FC37`; `netstandard.dll` was absent.
