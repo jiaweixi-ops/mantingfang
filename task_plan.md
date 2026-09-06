@@ -91,6 +91,21 @@ Keep the local worktree clean. The remaining acceptance work is external calibra
 - Push verified: local `HEAD` equals `origin/main`.
 - GitHub Actions run `34035192744`: success. V2.4D was not started.
 
+## V2.4D Build Option Semantic Parsing (2026-09-06)
+
+- [x] Add strict semantic models/parser for label, tri-state locked, non-negative known-resource costs, and semantic confidence without changing geometry.
+- [x] Add local-first current-card crop handling and one-shot `qwen3.8-flash` fallback over the 8-card montage; never call qwen3.8-max or retry.
+- [x] Add deterministic conflict precedence, affordability evaluation, and fresh-frame/slot identity binding.
+- [x] Add read-only `e2e-parse-build-options` evidence command and tests for malformed/coordinate/stale semantic data.
+- [x] Keep SendInput, mouse/keyboard, map/build clicks, saves, memory writes, Runtime Telemetry, and Mono Debugger at zero.
+- [ ] Run the real read-only CATEGORY_OPEN semantic sample, pytest, compileall, diff check, commit/push, and CI. Real sample and local checks passed; delivery remains.
+
+### V2.4D read-only result
+
+- Real sample: `PASS_SEMANTIC_MINIMUM` — 8 current-frame options, 8 real labels, 8 model-reported lock states, and no reliable costs.
+- WGC: healthy, `near_black_frame=false`; Song HWND `134730`, PID `32776`, `1280x960`, DPI 96.
+- Exactly one `qwen3.8-flash` call; Max calls 0; no retry. V2.4E is not started.
+
 ## V0.2 Game Integration backlog from latest acceptance
 
 Execute and push each item as its own verified task:

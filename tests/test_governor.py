@@ -199,6 +199,12 @@ def test_cli_exposes_v24c_dry_run_and_one_click_confirmation() -> None:
     assert live.confirm_live_category is True
 
 
+def test_cli_exposes_v24d_read_only_semantic_command() -> None:
+    args = build_parser().parse_args(["e2e-parse-build-options"])
+    assert args.command == "e2e-parse-build-options"
+    assert args.output_dir == "data/probe/V2.4D"
+
+
 def test_close_only_target_fallback_uses_formal_build_entry_roi_only() -> None:
     target = {"region": "build_controls", "canonical_id": "build_menu_close_control", "role": "BUILD_MENU_CLOSE"}
     candidates = _close_only_runtime_target_candidates(target)

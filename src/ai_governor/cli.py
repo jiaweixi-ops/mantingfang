@@ -29,6 +29,7 @@ from .e2e import (
     run_read_only_preflight,
 )
 from .build_category_e2e import BuildCategoryE2EError, run_build_category_dry_run, run_live_build_category_once
+from .build_option_semantics_e2e import run_read_only_build_option_semantics
 from .build_menu_observer import BuildMenuCalibrationError, sample_build_menu_phase
 from .feishu import CommandRouter
 from .feishu_http import FeishuApiClient, FeishuCallbackServer, FeishuEventHandler
@@ -119,6 +120,9 @@ def build_parser() -> argparse.ArgumentParser:
     category_once.add_argument("--wait-for-game-foreground", action="store_true", help="wait without focusing until Song is foreground for 3 seconds")
     category_once.add_argument("--foreground-timeout-seconds", type=float, default=30.0)
     category_once.add_argument("--settle-seconds", type=float, default=0.6)
+    semantic = sub.add_parser("e2e-parse-build-options", help="read-only current-frame Build Option semantic parsing")
+    semantic.add_argument("--output-dir", default="data/probe/V2.4D")
+    semantic.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
     preflight = sub.add_parser("e2e-preflight", help="run read-only Steam capture and Vision preflight")
     preflight.add_argument("--wait-for-game-foreground", action="store_true", help="wait up to 30 seconds for Song to remain foreground for 3 seconds")
     preflight.add_argument("--timeout-seconds", type=float, default=30.0)
@@ -539,6 +543,19 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result.get("result") == "PASS" else 2
+        if args.command == "e2e-parse-build-options":
+            try:
+                result = run_read_only_build_option_semantics(
+                    settings,
+                    store,
+                    output_dir=Path(args.output_dir),
+                    window_title=args.title,
+                )
+            except (QwenConfigurationError, WindowError, CaptureError, OSError, ValueError) as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result.get("result", "").startswith("PASS_") else 2
         if args.command == "e2e-preflight":
             try:
                 result = run_read_only_preflight(
