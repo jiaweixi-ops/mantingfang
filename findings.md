@@ -295,3 +295,11 @@
 - ROOT_OPEN passed 3/3 with the current-frame local close-control bbox `[0.96640625, 0.1135416667, 0.99921875, 0.1583333333]`, confidence `0.980664...`, stable Song HWND/PID/geometry, healthy WGC, and eight previously calibrated categories used only as non-actionable seed data before local tracking. No Qwen request was made for this R2 root run.
 - After the user manually entered a category, the single permitted `qwen3.8-flash` option-structure request returned an invalid shape and was rejected by the dedicated strict category schema as `CALIBRATION_MODEL_SCHEMA_FAIL`. It was not retried, no Max model was called, and no game input or mutation occurred.
 - The generic parser remains strict; category calibration has its own `{ "categories": [...] }` / `{ "options": [...] }` boundary and does not relax the generic Vision contract to accept top-level arrays.
+
+## 2026-09-06 — V2.4A/B-R3 deterministic Build Option geometry
+
+- The real CATEGORY_OPEN WGC frame is a healthy `1280x960` Song client capture (`WindowsGraphicsCaptureBackend` / `WGC`, `near_black_frame=false`). The actual repeated building-card row lies in the upper half of the existing `build_controls` ROI; the root menu has no equivalent repeated structure in that band.
+- Added a standard-library-only foreground/column-run detector constrained to that formal region. It derives all slot bboxes from the current RGBA frame, merges small interior gaps, rejects size/boundary violations, applies NMS, and assigns a stable left-to-right slot ID per visual row.
+- CATEGORY_OPEN passed 3/3 using only local detection. Every sample had the same Song HWND/PID/client geometry, a local `BUILD_MENU_CLOSE` confidence around `0.98`, and eight `BUILD_OPTION` geometry slots at confidence `0.9728` to `0.9796`. Their semantics remain intentionally unknown: `label="unknown"`, `locked=null`, and `costs={}`.
+- Cross-frame safety remains fail-closed: option slot IDs must match, IoU must be at least `0.85`, and center drift must not exceed `4.8px` at this client geometry. The actual three frames passed all checks. Qwen calls for R3 were `0`; no Qwen schema was changed or retried.
+- An ad-hoc offline PNG decoder command had a shell escaping syntax error. It made no game or repository change; the subsequent direct fresh WGC detector invocation replaced it and returned all eight slots.

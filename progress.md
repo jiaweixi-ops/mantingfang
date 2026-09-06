@@ -435,3 +435,11 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - ROOT_OPEN real-game calibration passed 3/3: WGC was healthy, Song HWND/PID/geometry remained stable, the local close resolver reported confidence `0.980664...`, and eight categories were reused only as non-actionable same-geometry seeds before current-frame tracking. This R2 root run made zero Qwen calls.
 - The user manually entered a category. The one permitted `qwen3.8-flash` option calibration request returned an invalid response shape, was rejected as `CALIBRATION_MODEL_SCHEMA_FAIL`, and was not retried. `qwen3.8-max` was not called. CATEGORY_OPEN remains pending; V2.4C was not entered.
 - Across R2 there were zero SendInput, keyboard/mouse input, map clicks, save writes, memory writes, Runtime Telemetry access, and Mono Debugger activity.
+
+## 2026-09-06 — V2.4A/B-R3 deterministic Build Option geometry
+
+- Added `src/ai_governor/build_option_detector.py`: a dependency-free current-frame slot detector restricted to the upper content band of the existing `build_controls` RegionCatalog ROI. It performs local foreground segmentation, horizontal component grouping, size/aspect/bounds filtering, overlap suppression, and row-wise left-to-right ID assignment.
+- CATEGORY_OPEN now uses that detector on every one of the three fresh WGC frames rather than a first-frame model response or a stale target. Local close resolution remains independent in `build_entry`.
+- Added synthetic tests for repeated option slots, root-tab/closed/map/close-control exclusions, invalid size/boundary candidates, overlap suppression, left-to-right IDs, and category center-drift rejection.
+- Real-game CATEGORY_OPEN calibration passed: `category_open` 3/3, eight stable options, WGC healthy, stable Song HWND `134730` / PID `32776` / `1280x960` geometry / DPI `96`, slot confidence at least `0.9728`, IoU threshold `0.85`, and center-drift threshold `4.8px`.
+- R3 invoked Qwen zero times and made zero SendInput, keyboard/mouse, map-click, save-write, memory-write, Runtime Telemetry, or Mono Debugger operations. All three V2.4A/B-R states now pass, so the result is `PASS_GEOMETRY_CALIBRATED`; V2.4C remains deliberately untouched.

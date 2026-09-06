@@ -72,6 +72,15 @@ def test_phase_assessment_requires_real_category_geometry() -> None:
     assert assess_phase_snapshots("root", [_closed_snapshot(), _closed_snapshot(), _closed_snapshot()])["stable"] is False
 
 
+def test_category_assessment_rejects_center_drift_even_when_slot_id_matches() -> None:
+    base = _root_snapshot()
+    option = BuildOption("build_option_slot_01", "unknown", (0.20, 0.70, 0.30, 0.80), 0.95, None, {})
+    drifting = BuildOption("build_option_slot_01", "unknown", (0.30, 0.70, 0.40, 0.80), 0.95, None, {})
+    category = BuildMenuSnapshot(BuildMenuState.CATEGORY_OPEN, "建筑菜单", (), (option,), base.geometry, None, base.close_control, {})
+    changed = BuildMenuSnapshot(BuildMenuState.CATEGORY_OPEN, "建筑菜单", (), (drifting,), base.geometry, None, base.close_control, {})
+    assert assess_phase_snapshots("category", [category, changed, changed])["stable"] is False
+
+
 def test_template_tracker_returns_a_bbox_from_the_fresh_frame() -> None:
     width = height = 64
     reference = bytearray([0, 0, 0, 255] * (width * height))

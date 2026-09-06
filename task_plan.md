@@ -383,3 +383,13 @@ Scope decision: V2.3X4 Mono Debugger is research-only after the safe connect tim
 - [ ] Run pytest, compileall, diff check, commit, push, and CI verification for the deterministic control/category-fusion implementation.
 
 Current execution note: CLOSED is PASS (3/3). ROOT_OPEN is PASS (3/3) through a current-frame deterministic red close-control resolver at confidence 0.9807 plus eight geometry-calibrated categories reused only as non-actionable seeds. CATEGORY_OPEN made its one permitted `qwen3.8-flash` request and received an invalid response shape (`CALIBRATION_MODEL_SCHEMA_FAIL`); it was not retried. No `qwen3.8-max`, input, map click, save write, or memory write occurred during R2.
+
+## V2.4A/B-R3 Deterministic Build Option Geometry Calibration
+
+- [x] Keep Qwen fully disconnected from CATEGORY_OPEN; do not retry or loosen any model schema.
+- [x] Add a local current-frame option-slot geometry detector constrained to the existing `build_controls` ROI.
+- [x] Add synthetic negative cases for root tabs, closed/menu-map controls, size limits, bounds, and overlap suppression.
+- [x] Sample the user-held CATEGORY_OPEN page three times with no input and require stable current-frame option geometry.
+- [ ] Run full verification, commit, push, wait for CI, and stop before V2.4C.
+
+Result: `V2.4A/B-R=PASS_GEOMETRY_CALIBRATED`. CLOSED, ROOT_OPEN, and CATEGORY_OPEN each passed 3/3; CATEGORY_OPEN produced eight stable local slots, with fresh WGC/current HWND/PID/geometry on every sample and zero Qwen calls in R3.

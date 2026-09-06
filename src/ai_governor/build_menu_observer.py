@@ -21,6 +21,7 @@ from .build_menu import (
     FrameGeometry,
     parse_build_menu_snapshot,
 )
+from .build_option_detector import detect_build_option_slots
 from .capture import CaptureBlackFrameError, ClientAreaCapture, WindowsGraphicsCaptureBackend
 from .config import Settings
 from .models import utc_now
@@ -373,6 +374,19 @@ def _bbox_iou(first: Any, second: Any) -> float:
     return intersection / union if union else 0.0
 
 
+def _center_drift_pixels(first: Any, second: Any, geometry: FrameGeometry) -> float:
+    if not isinstance(first, (list, tuple)) or not isinstance(second, (list, tuple)) or len(first) != 4 or len(second) != 4:
+        return float("inf")
+    try:
+        first_x = (float(first[0]) + float(first[2])) / 2 * geometry.client_width
+        first_y = (float(first[1]) + float(first[3])) / 2 * geometry.client_height
+        second_x = (float(second[0]) + float(second[2])) / 2 * geometry.client_width
+        second_y = (float(second[1]) + float(second[3])) / 2 * geometry.client_height
+    except (TypeError, ValueError):
+        return float("inf")
+    return ((first_x - second_x) ** 2 + (first_y - second_y) ** 2) ** 0.5
+
+
 def _required_elements(snapshot: BuildMenuSnapshot, phase: str) -> list[tuple[str, Any]]:
     elements: list[tuple[str, Any]] = []
     if phase == "closed":
@@ -417,6 +431,9 @@ def assess_phase_snapshots(phase: str, snapshots: list[BuildMenuSnapshot], *, io
         stable = stable and required_counts["categories_found"] >= 1
     if phase == "category":
         stable = stable and required_counts["options_found"] >= 1
+    center_drift_threshold = 0.0
+    if phase == "category" and snapshots and snapshots[0].geometry is not None:
+        center_drift_threshold = max(4.0, min(snapshots[0].geometry.client_width, snapshots[0].geometry.client_height) * 0.005)
     if snapshots:
         first_items = _required_elements(snapshots[0], phase)
         for label, first in first_items:
@@ -433,7 +450,12 @@ def assess_phase_snapshots(phase: str, snapshots: list[BuildMenuSnapshot], *, io
                     first_bbox = first.get("global_bbox", first.get("bbox")) if isinstance(first, Mapping) else None
                     current_bbox = current.get("global_bbox", current.get("bbox")) if isinstance(current, Mapping) else None
                     current_confidence = current.get("confidence", 0.0) if isinstance(current, Mapping) else 0.0
-                if current is None or current_confidence < MIN_CALIBRATION_CONFIDENCE or _bbox_iou(first_bbox, current_bbox) < iou_threshold:
+                if (
+                    current is None
+                    or current_confidence < MIN_CALIBRATION_CONFIDENCE
+                    or _bbox_iou(first_bbox, current_bbox) < iou_threshold
+                    or (phase == "category" and _center_drift_pixels(first_bbox, current_bbox, snapshots[0].geometry) > center_drift_threshold)
+                ):
                     stable = False
     return {
         "samples": len(snapshots),
@@ -441,6 +463,7 @@ def assess_phase_snapshots(phase: str, snapshots: list[BuildMenuSnapshot], *, io
         "states": [state.value for state in states],
         **required_counts,
         "iou_threshold": iou_threshold,
+        "center_drift_threshold_px": center_drift_threshold,
         "actionable_confidence": MIN_CALIBRATION_CONFIDENCE,
     }
 
@@ -534,15 +557,10 @@ def sample_build_menu_phase(
                     tracking = []
                     qwen_calls += 1
             elif phase == "category":
-                observation = ensure_perception().observe_build_options_rgba(
-                    frame.rgba,
-                    frame.width,
-                    frame.height,
-                    context=str(_PHASE_CONFIG[phase]["context"]),
-                ).data
+                slots = detect_build_option_slots(frame.rgba, frame.width, frame.height, catalog)
+                observation = {"building_options": slots, "ui_elements": slots}
                 reference_observation = dict(observation)
                 tracking = []
-                qwen_calls += 1
             else:
                 observation = ensure_perception().observe_rgba(
                     frame.rgba,
@@ -554,6 +572,10 @@ def sample_build_menu_phase(
                 reference_observation = dict(observation)
                 tracking = []
             reference_rgba = frame.rgba
+        elif phase == "category":
+            slots = detect_build_option_slots(frame.rgba, frame.width, frame.height, catalog)
+            observation = {"building_options": slots, "ui_elements": slots}
+            tracking = []
         else:
             if reference_observation is None or reference_rgba is None:
                 raise BuildMenuCalibrationError("missing first-frame calibration reference")
