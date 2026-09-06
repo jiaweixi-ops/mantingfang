@@ -456,3 +456,11 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Added semantic dataclasses, strict coordinate-free Qwen schema, conflict precedence, affordability tri-state, current-card crop/montage helpers, read-only CLI wiring, and tests. Two local test failures were fixed before real-game execution; no input or Qwen call has occurred.
 - First read-only live semantic attempt failed before HTTP due to a montage allocation bug; no Qwen request or input occurred. Corrected the canvas size and retained the one-call limit.
 - Final V2.4D sample passed at `PASS_SEMANTIC_MINIMUM`: current CATEGORY_OPEN WGC frame produced 8 local slots and one strict `qwen3.8-flash` call resolved 8 labels and 8 tri-state lock values; costs stayed `{}` because no complete resource/quantity pair was reliable. No input, map/build click, save, memory, telemetry, or debugger operation occurred.
+
+## 2026-09-06 — V2.4D delivery completed
+
+- The real read-only semantic sample completed as `PASS_SEMANTIC_MINIMUM`: 8 current-frame options, 8 real labels, and 8 model-reported tri-state lock values. Costs remained unresolved, so the result is not `PASS_SEMANTIC_CALIBRATED`.
+- Exactly one `qwen3.8-flash` call was used; `qwen3.8-max` calls and retries were zero. Geometry stayed bound to the fresh WGC frame; model coordinates were rejected and never became actionable.
+- Safety counters remained zero for SendInput, mouse/keyboard, map/build clicks, save writes, memory writes, Runtime Telemetry, and Mono Debugger.
+- Code commit `5733160f65165d190b2eb6516d61f475ee1f2090` passed full local pytest (`155 passed`), compileall, diff check, and GitHub Actions run `34035801305`.
+- This follow-up only records delivery status. V2.4E was not started, and `data/probe/V2.4D/result.json` remains ignored.

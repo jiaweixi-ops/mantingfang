@@ -98,12 +98,18 @@ Keep the local worktree clean. The remaining acceptance work is external calibra
 - [x] Add deterministic conflict precedence, affordability evaluation, and fresh-frame/slot identity binding.
 - [x] Add read-only `e2e-parse-build-options` evidence command and tests for malformed/coordinate/stale semantic data.
 - [x] Keep SendInput, mouse/keyboard, map/build clicks, saves, memory writes, Runtime Telemetry, and Mono Debugger at zero.
-- [ ] Run the real read-only CATEGORY_OPEN semantic sample, pytest, compileall, diff check, commit/push, and CI. Real sample and local checks passed; delivery remains.
+- [x] Run the real read-only CATEGORY_OPEN semantic sample, pytest, compileall, diff check, commit/push, and CI. Real sample and local checks passed; delivery is recorded below.
 
 ### V2.4D read-only result
 
 - Real sample: `PASS_SEMANTIC_MINIMUM` — 8 current-frame options, 8 real labels, 8 model-reported lock states, and no reliable costs.
 - WGC: healthy, `near_black_frame=false`; Song HWND `134730`, PID `32776`, `1280x960`, DPI 96.
+- Semantic model: exactly one `qwen3.8-flash` call, zero `qwen3.8-max` calls, no retry, and no model-provided coordinates accepted.
+- Safety counters: SendInput, mouse/keyboard, map/build clicks, save writes, memory writes, Runtime Telemetry, and Mono Debugger all remained zero.
+- Code commit: `5733160f65165d190b2eb6516d61f475ee1f2090` (`feat: add read-only build option semantics`).
+- Local verification: full pytest `155 passed`; `compileall -q src` passed; `git diff --check` passed.
+- GitHub Actions run `34035801305`: success; local `HEAD` matched `origin/main` before this record-only follow-up.
+- V2.4E was not started. Costs remain unresolved, so this is not `PASS_SEMANTIC_CALIBRATED`.
 - Exactly one `qwen3.8-flash` call; Max calls 0; no retry. V2.4E is not started.
 
 ## V0.2 Game Integration backlog from latest acceptance
