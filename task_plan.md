@@ -270,4 +270,4 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Add geometry snapshots to observed UI targets; reject `TARGET_STALE` before mouse down/up when HWND, PID, client size, origin, or DPI changes.
 - [x] Add the read-only BepInEx/Unity bridge reference source and external-reference build contract; do not inject it automatically.
 - [x] Add Windows CI coverage for Python 3.11/3.12 module import, tests, compileall, and diff check.
-- [ ] Run CI after push and inspect both Linux and Windows jobs; do not run Live E2E in this phase.
+- [x] Run CI after push and inspect both Linux and Windows jobs; do not run Live E2E in this phase. Initial Windows failure was fixed by declaring `tzdata>=2022.7`; rerun `34024937213` passed all four jobs.
