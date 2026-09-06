@@ -84,6 +84,13 @@ Keep the local worktree clean. The remaining acceptance work is external calibra
 - [x] Add regression tests for stale/unsafe plans, role/bounds filtering, zero-Qwen behavior, and one-click fail-closed outcomes.
 - [x] Run pytest, compileall, diff check, execute the authorized real one-click scenario, then commit/push and verify CI. Do not enter V2.4D.
 
+### V2.4C delivery record
+
+- Real result: `PASS` — `ROOT_OPEN -> CATEGORY_OPEN`, exactly one category-tab click, eight fresh BUILD_OPTION slots, and automatic live disarm.
+- Code commit: `10a1ac6aaf4c43eff1a31096ca5501d02fa6c2f4` (`feat: verify one-click build category navigation`).
+- Push verified: local `HEAD` equals `origin/main`.
+- GitHub Actions run `34035192744`: success. V2.4D was not started.
+
 ## V0.2 Game Integration backlog from latest acceptance
 
 Execute and push each item as its own verified task:
