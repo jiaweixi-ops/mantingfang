@@ -186,6 +186,15 @@
 - A fresh `preloader_20260906_190909_776.log` still records the known BepInEx `Module.GetPEKind` `MissingMethodException`, and `BepInEx\\LogOutput.log` is absent. This confirms BepInEx remains incompatible, but does not prevent the user-confirmed normal game entry.
 - The project is `READY_FOR_DOORSTOP_DEBUGGER_TEST`: the CI-built bootstrap remains source/artifact-only, with no bootstrap DLL deployed, no debugger listener, no telemetry enablement, no input, and no save or memory write.
 
+## 2026-09-06 — V2.3X4-C Doorstop debugger test prepared
+
+- With `Song.exe` fully stopped and no listener on local port `10000`, downloaded the exact `DoorstopTelemetryBootstrap` artifact from successful GitHub Actions run `34029294783` (source commit `c6d137d03983361faba41e6e3a90b6724ad3e039`).
+- The artifact DLL is 3,584 bytes with SHA-256 `4ED5E6640E8C259561BAC2989249C18911790252C6E98A5C75AEB83797B7DADE`. Metadata-only inspection found CLR metadata `v4.0.30319`, `.NETFramework,Version=v4.0`, pure managed IL flags, no native entry point, and `Doorstop.Entrypoint.Start`; the DLL was not executed during inspection.
+- Installed exactly one file at `DoorstopProbe\\DoorstopTelemetryBootstrap.dll`. No BepInEx DLL or game managed assembly was copied or modified.
+- Backed up `doorstop_config.ini` byte-for-byte as `doorstop_config.ini.v2.3x4c-before-debugger.bak`; backup SHA-256 is `4D5C6DFA0F771C6A5B1B0C559ACA0BD0ECE7D08B08FFF894708DC3B73CE73CFC`.
+- The active config SHA-256 is now `7F259C46FEA4EC8DE746854EB7F82E71FDE5B562CF30A912611CE89E24F0A682`. Line comparison against the backup confirms only `target_assembly=DoorstopProbe\\DoorstopTelemetryBootstrap.dll` and `debug_enabled = true` changed.
+- Effective safety settings remain `dll_search_path_override =`, `debug_address = 127.0.0.1:10000`, and `debug_suspend = false`. Preparation stopped before game launch or debugger connection; status is `READY_FOR_DOORSTOP_DEBUGGER_TEST`.
+
 ## 2026-09-06 — V2.3X4-B Exact Unity Corlib Compatibility Test preparation
 
 - Preserved the original `Song_Data\\Managed` core files. Before the override, hashes were: `mscorlib.dll` `FC5B144B...4EA92CB`, `System.dll` `1252E720...78044E8`, `System.Core.dll` `A9A106E0...B77FC37`; `netstandard.dll` was absent.

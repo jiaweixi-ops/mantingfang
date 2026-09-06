@@ -310,4 +310,9 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Add a minimal, no-op Doorstop entrypoint that references neither BepInEx nor Unity.
 - [x] Validate CI compilation and artifact publication for the bootstrap only (GitHub Actions run `34029235704`).
 - [x] Confirm the restored baseline game starts normally before any Doorstop-only debugger test.
-- [ ] Do not deploy the bootstrap or enable the Mono debugger until the user explicitly authorizes that separate game-directory configuration change.
+- [x] Receive explicit authorization to prepare the isolated Doorstop debugger test.
+- [x] Verify port `10000` is unused and download the exact `DoorstopTelemetryBootstrap` artifact from run `34029294783`.
+- [x] Verify the artifact DLL hash, PE/.NET metadata, and `net40` target evidence without executing it.
+- [x] Install only the bootstrap DLL under `DoorstopProbe`, preserving all game managed assemblies and BepInEx files.
+- [x] Back up `doorstop_config.ini` byte-for-byte and change only the bootstrap target plus loopback debugger settings.
+- [x] Stop at `READY_FOR_DOORSTOP_DEBUGGER_TEST`; do not start the game or connect a debugger.

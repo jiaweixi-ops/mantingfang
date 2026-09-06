@@ -340,6 +340,14 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - A new Preloader log repeats only the known BepInEx 5 `Module.GetPEKind` compatibility failure; `LogOutput.log` remains absent. The game itself is usable, while BepInEx remains unavailable.
 - Status: `READY_FOR_DOORSTOP_DEBUGGER_TEST`. The next step requires separate explicit authorization because it would change the Doorstop target/configuration. No bootstrap deployment, debugger activation, telemetry enablement, game input, save write, or memory write occurred.
 
+## 2026-09-06 — Doorstop-only debugger transport test prepared
+
+- Confirmed `Song.exe` was stopped and TCP port `10000` had no listener before changing the game-directory test configuration.
+- Downloaded the exact CI artifact from run `34029294783`, verified its 3,584-byte DLL and SHA-256 `4ED5E6640E8C259561BAC2989249C18911790252C6E98A5C75AEB83797B7DADE`, and inspected its managed metadata without loading it.
+- Installed only `DoorstopProbe\\DoorstopTelemetryBootstrap.dll`, then created a byte-for-byte Doorstop config backup with SHA-256 `4D5C6DFA0F771C6A5B1B0C559ACA0BD0ECE7D08B08FFF894708DC3B73CE73CFC`.
+- Config diff contains exactly two changes: the target now points to the isolated bootstrap and loopback Mono debugging is enabled. `debug_address=127.0.0.1:10000`, `debug_suspend=false`, and the corlib override remains blank. New config SHA-256 is `7F259C46FEA4EC8DE746854EB7F82E71FDE5B562CF30A912611CE89E24F0A682`.
+- Stopped at `READY_FOR_DOORSTOP_DEBUGGER_TEST`. The game was not launched, no debugger client connected, and no runtime field, input, save, or memory operation occurred.
+
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 
 - Fixed `TryReadResource` to use the cached reader instance instead of calling instance reflection from a static method.
