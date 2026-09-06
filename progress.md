@@ -452,6 +452,14 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Fixed provenance preservation, reran dry-run successfully, then executed the authorized V2.4C one-click scenario. Result: PASS (`ROOT_OPEN -> CATEGORY_OPEN`), click count 1, fresh postcondition found 8 option slots, live automatically disarmed. Local evidence remains ignored at `data/probe/V2.4C/result.json`.
 - Committed the V2.4C implementation and test/plan records as `4847274` (`feat: verify one-click build category navigation`); remote push and CI confirmation are next. No V2.4D action has been started.
 - Delivery completed after amend as `10a1ac6aaf4c43eff1a31096ca5501d02fa6c2f4`; `origin/main` matches. GitHub Actions run `34035192744` completed successfully. V2.4C is complete and V2.4D remains untouched.
+
+## 2026-09-06 — V2.4E0 completed on the real construction panel
+
+- User clarified the actual buildable UI is the lower `土木` construction panel with repeated building cards, not the `建筑增益` encyclopedia.
+- Added a narrow current-frame detector for the real five-card panel geometry and a lower-right build-control resolver; focused tests passed (`11 passed`).
+- Real read-only workflow passed: baseline `CATEGORY_OPEN` with 5 options, user manually selected one option, current-frame placement state detected, user manually cancelled, and post-cancel returned to `CATEGORY_OPEN`.
+- Evidence: placement confidence `0.9271079422`, cancel confidence `0.98`, one manual selection, zero automated inputs/mutations/Qwen calls. The ignored result is `data/probe/V2.4E0/result.json`.
+- No live category click, building click, map click, keyboard input, telemetry, debugger, save write, or memory write was executed.
 - V2.4D started from the user-provided read-only semantic parsing contract. No input or model call has been made in this phase yet.
 - Added semantic dataclasses, strict coordinate-free Qwen schema, conflict precedence, affordability tri-state, current-card crop/montage helpers, read-only CLI wiring, and tests. Two local test failures were fixed before real-game execution; no input or Qwen call has occurred.
 - First read-only live semantic attempt failed before HTTP due to a montage allocation bug; no Qwen request or input occurred. Corrected the canvas size and retained the one-call limit.

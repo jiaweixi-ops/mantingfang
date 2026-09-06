@@ -129,6 +129,16 @@ Current real calibration result: placement state was detected with confidence `0
 Additional diagnosis: a later baseline attempt captured the city scene with the persistent bottom quick-build toolbar, not the full Build Menu category panel. It correctly stopped as `UNKNOWN`; do not treat the bottom toolbar alone as `CATEGORY_OPEN`.
 - Exactly one `qwen3.8-flash` call; Max calls 0; no retry. V2.4E is not started.
 
+### V2.4E0 delivery update
+
+- [x] Correct the read-only detector for the real lower `土木` construction panel and its right-side build control group.
+- [x] Re-run the user-driven read-only calibration from the real construction panel.
+- [x] Verify manual selection produces current-frame `BUILDING_SELECTED` evidence and a fresh placement-cancel target.
+- [x] Verify manual cancel returns to current-frame `CATEGORY_OPEN` without placement evidence.
+- [x] Run full pytest, compileall, diff check, commit, push, and CI verification.
+
+Result: `PASS` — pre-state `category_open`, manual selection count `1`, placement confidence `0.9271`, cancel confidence `0.98`, post-cancel `category_open`, and all automated input/mutation counters zero. V2.4C is not entered.
+
 ## V0.2 Game Integration backlog from latest acceptance
 
 Execute and push each item as its own verified task:

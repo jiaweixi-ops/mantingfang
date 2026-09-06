@@ -303,6 +303,19 @@
 - CATEGORY_OPEN passed 3/3 using only local detection. Every sample had the same Song HWND/PID/client geometry, a local `BUILD_MENU_CLOSE` confidence around `0.98`, and eight `BUILD_OPTION` geometry slots at confidence `0.9728` to `0.9796`. Their semantics remain intentionally unknown: `label="unknown"`, `locked=null`, and `costs={}`.
 - Cross-frame safety remains fail-closed: option slot IDs must match, IoU must be at least `0.85`, and center drift must not exceed `4.8px` at this client geometry. The actual three frames passed all checks. Qwen calls for R3 were `0`; no Qwen schema was changed or retried.
 - An ad-hoc offline PNG decoder command had a shell escaping syntax error. It made no game or repository change; the subsequent direct fresh WGC detector invocation replaced it and returned all eight slots.
+
+## 2026-09-06 — V2.4E0 actual construction panel clarification
+
+- The user supplied a fresh screenshot showing the real construction interface: a parchment `土木` panel with repeated building cards above the persistent HUD and placement controls on the lower-right. This is the actionable build-menu/category interface, not the `建筑增益` encyclopedia.
+- A fresh WGC diagnostic captured the same 1280x960 game client with `WindowsGraphicsCaptureBackend`, raster mode `WGC`, and `near_black_frame=false`; it contains the construction panel and building cards.
+- The current V2.4E0 local state detector still returned `UNKNOWN` before the manual-selection prompt. The likely gap is the assumed red close-control location in the upper-right `build_entry` ROI; the actual construction panel's controls are in the lower build-controls area. No input, Qwen call, telemetry, debugger, save write, or memory write occurred.
+
+## 2026-09-06 — V2.4E0 actual construction panel calibration passed
+
+- The detector now recognizes the real lower `土木` construction panel with a current-frame five-slot geometry probe and resolves the lower-right red build control as `BUILD_MENU_TOGGLE` evidence. It does not reuse calibration bboxes as actionable input.
+- Read-only real-game result: `category_open -> building_selected -> category_open` after the user manually selected and manually cancelled one building option. Placement confidence was `0.9271`; current-frame cancel confidence was `0.98`.
+- WGC remained healthy with `near_black_frame=false`; HWND `396876`, PID `33016`, client `1280x960`, origin `[1,87]`, DPI `96` remained stable across baseline, selected, and post-cancel frames.
+- Safety counters were all zero for SendInput, automated mouse/keyboard, map clicks, Qwen, Runtime Telemetry, Mono Debugger, save writes, memory writes, and automated building placement. V2.4C was not entered.
 # V2.4C implementation notes (2026-09-06)
 
 - The live category action must resolve its category candidate from the same fresh WGC frame used for precondition validation. Earlier V2.4 calibration bboxes are non-actionable only.

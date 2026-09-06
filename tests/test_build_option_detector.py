@@ -71,3 +71,18 @@ def test_category_tabs_are_redetected_on_this_frame_not_loaded_from_calibration(
     assert tabs[0]["role"] == "BUILD_CATEGORY_TAB"
     assert tabs[0]["resolver"] == "deterministic_current_frame_category_tab"
     assert tabs[0]["confidence"] >= 0.90
+
+
+def test_actual_construction_panel_grid_recovers_pale_repeated_cards() -> None:
+    width, height = 1280, 960
+    frame = _frame(width, height)
+    # Pale cards still contain enough dark/icon pixels for the calibrated
+    # five-slot geometry probe, while the parchment background stays light.
+    for index in range(5):
+        left = round(width * (0.34 + index * 0.077))
+        right = round(width * (0.34 + index * 0.077 + 0.063))
+        _paint(frame, width, left + 12, 710, right - 8, 790, (90, 90, 82))
+    slots = detect_build_option_slots(bytes(frame), width, height, RegionCatalog())
+    assert len(slots) == 5
+    assert all(slot["resolver"].startswith("deterministic_current_frame_") for slot in slots)
+    assert all(slot["confidence"] >= 0.90 for slot in slots)

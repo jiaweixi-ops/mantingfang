@@ -112,3 +112,18 @@ def test_local_control_resolver_uses_current_red_close_patch() -> None:
     assert control["region"] == "build_entry"
     assert control["confidence"] >= 0.90
     assert control["global_bbox"] == [56 / 64, 6 / 64, 64 / 64, 14 / 64]
+
+
+def test_local_control_resolver_uses_real_lower_build_toggle_as_non_close_evidence() -> None:
+    width = height = 128
+    frame = bytearray([210, 200, 180, 255] * (width * height))
+    for y in range(103, 117):
+        for x in range(108, 120):
+            offset = (y * width + x) * 4
+            frame[offset:offset + 4] = bytes((210, 60, 45, 255))
+    control = _resolve_local_menu_control(bytes(frame), width, height, RegionCatalog())
+    assert control is not None
+    assert control["role"] == "BUILD_MENU_TOGGLE"
+    assert control["region"] == "build_controls"
+    assert control["raw_id"] == "local_red_toggle_control"
+    assert control["confidence"] >= 0.90

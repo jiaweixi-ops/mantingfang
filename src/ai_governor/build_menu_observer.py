@@ -144,36 +144,30 @@ def _track_bbox(
     ], max(0.0, 1.0 - best_error)
 
 
-def _resolve_local_menu_control(
+def _red_components(
     rgba: bytes,
     width: int,
     height: int,
-    catalog: RegionCatalog,
-) -> dict[str, Any] | None:
-    """Resolve the visible red close/toggle control from the current frame.
-
-    Song's open-menu close control is in the existing ``build_entry`` formal
-    ROI, not in the lower ``build_controls`` crop.  This resolver uses only
-    current-frame pixels and that catalog boundary; it never consumes or
-    returns a calibration bbox as an actionable target.
-    """
-    region = catalog.get("build_entry")
-    left, top, right, bottom = region.crop_box(width, height)
-    search_left = max(left, int(width * 0.88))
-    search_top = max(top, int(height * 0.08))
-    search_bottom = min(bottom, int(height * 0.25))
-    if search_left >= right or search_top >= search_bottom:
-        return None
-    visited: set[tuple[int, int]] = set()
-    components: list[tuple[int, int, int, int, int]] = []
+    search_left: int,
+    search_top: int,
+    search_right: int,
+    search_bottom: int,
+    *,
+    minimum_pixels: int = 40,
+) -> list[tuple[int, int, int, int, int]]:
+    """Return red connected components inside one current-frame ROI."""
+    if search_left >= search_right or search_top >= search_bottom:
+        return []
 
     def is_red(x: int, y: int) -> bool:
         offset = (y * width + x) * 4
         red, green, blue = rgba[offset:offset + 3]
         return red >= 140 and red > green * 1.45 and red > blue * 1.35 and green <= 150
 
+    visited: set[tuple[int, int]] = set()
+    components: list[tuple[int, int, int, int, int]] = []
     for y in range(search_top, search_bottom):
-        for x in range(search_left, right):
+        for x in range(search_left, search_right):
             if (x, y) in visited or not is_red(x, y):
                 continue
             stack = [(x, y)]
@@ -189,17 +183,76 @@ def _resolve_local_menu_control(
                     (current_x, current_y + 1),
                 ):
                     if (
-                        search_left <= next_x < right
+                        search_left <= next_x < search_right
                         and search_top <= next_y < search_bottom
                         and (next_x, next_y) not in visited
                         and is_red(next_x, next_y)
                     ):
                         visited.add((next_x, next_y))
                         stack.append((next_x, next_y))
-            if len(pixels) >= 40:
+            if len(pixels) >= minimum_pixels:
                 xs = [item[0] for item in pixels]
                 ys = [item[1] for item in pixels]
                 components.append((len(pixels), min(xs), min(ys), max(xs) + 1, max(ys) + 1))
+    return components
+
+
+def _resolve_local_menu_control(
+    rgba: bytes,
+    width: int,
+    height: int,
+    catalog: RegionCatalog,
+) -> dict[str, Any] | None:
+    """Resolve the visible red close/toggle control from the current frame.
+
+    Prefer the known upper-right close control, then inspect the real lower
+    construction-panel control group as toggle evidence.  This resolver uses
+    only current-frame pixels and formal catalog bounds; it never consumes or
+    returns a calibration bbox as an actionable target.
+    """
+    region = catalog.get("build_entry")
+    left, top, right, bottom = region.crop_box(width, height)
+    search_left = max(left, int(width * 0.88))
+    search_top = max(top, int(height * 0.08))
+    search_bottom = min(bottom, int(height * 0.25))
+    if search_left >= right or search_top >= search_bottom:
+        return None
+    components = _red_components(
+        rgba,
+        width,
+        height,
+        search_left,
+        search_top,
+        right,
+        search_bottom,
+    )
+    region_name = "build_entry"
+    role = "BUILD_MENU_CLOSE"
+    identifier = "build_menu_close_control"
+    label = "关闭"
+    resolver = "deterministic_current_frame_red_control"
+    raw_id = "local_red_close_control"
+    if not components:
+        # The real construction panel does not use the encyclopedia's upper
+        # right X.  Its current-frame build-mode control group is in the lower
+        # right of the existing build_controls ROI.  Treat the largest valid
+        # red button there as toggle evidence only; it is not an actionable
+        # target until a later phase calibrates its semantic role separately.
+        region_name = "build_controls"
+        role = "BUILD_MENU_TOGGLE"
+        identifier = "build_menu_toggle_control"
+        label = "建造菜单"
+        resolver = "deterministic_current_frame_build_controls_toggle"
+        raw_id = "local_red_toggle_control"
+        components = _red_components(
+            rgba,
+            width,
+            height,
+            max(0, int(width * 0.78)),
+            max(0, int(height * 0.78)),
+            min(width, int(width * 0.96)),
+            min(height, int(height * 0.95)),
+        )
     if not components:
         return None
     area, box_left, box_top, box_right, box_bottom = max(components)
@@ -212,16 +265,16 @@ def _resolve_local_menu_control(
     confidence = min(0.99, max(0.90, 0.90 + 0.04 * min(1.0, fill) + 0.05 * squareness))
     bbox = [box_left / width, box_top / height, box_right / width, box_bottom / height]
     return {
-        "id": "build_menu_close_control",
-        "canonical_id": "build_menu_close_control",
-        "raw_id": "local_red_close_control",
-        "role": "BUILD_MENU_CLOSE",
-        "label": "关闭",
+        "id": identifier,
+        "canonical_id": identifier,
+        "raw_id": raw_id,
+        "role": role,
+        "label": label,
         "bbox": bbox,
         "global_bbox": bbox,
         "confidence": confidence,
-        "region": "build_entry",
-        "resolver": "deterministic_current_frame_red_control",
+        "region": region_name,
+        "resolver": resolver,
     }
 
 
