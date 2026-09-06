@@ -170,4 +170,4 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Add read-only `e2e-resolve-build-menu-targets --state open|closed` with current-frame Vision resolution.
 - [x] Add regression coverage for ROI membership, runtime-region wiring, resolver safety, and no calibration-bbox input fallback.
 - [x] Run pytest/compileall/diff check and perform only read-only resolver validation; never arm Live or run e2e-build-menu.
-- [ ] Commit/push as `fix: align build menu calibration with runtime regions` and verify CI.
+- [x] Commit/push as `fix: align build menu calibration with runtime regions` and verify CI.

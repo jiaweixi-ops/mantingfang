@@ -139,3 +139,4 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Open-state retry was blocked because Song.exe/window was no longer running (`game window not found: Song`); final two-state calibration and read-only resolver remain pending a relaunch with the menu open.
 - After relaunch, open-state formal calibration passed on Song HWND `526608`, PID `26320`, with `build_controls` close target confidence `0.90`; closed-state resolver passed on the same WGC client with `build_entry` entrance confidence `0.90`.
 - Final local verification after semantic-family compatibility: `89 passed, 1 skipped`; Python 3.11 `compileall` PASS; `git diff --check` PASS. No Live E2E, arm-live, or input was executed.
+- Delivery: commit `12e022a118537a0caf34c7a1f47b4dc6a7868630` pushed to `origin/main`; local and remote SHA match. GitHub Actions run `34006800721` passed on Python 3.11 and 3.12.
