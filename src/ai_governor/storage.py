@@ -92,7 +92,7 @@ class SQLiteStore:
             (utc_now(), str(usage.get("kind", "chat")), str(usage.get("model", "unknown")),
              int(usage.get("prompt_tokens", 0)), int(usage.get("completion_tokens", 0)), int(usage.get("total_tokens", 0))),
         )
-        self.audit("token_usage", "DeepSeek usage recorded", usage)
+        self.audit("token_usage", "Qwen usage recorded", usage)
         self._commit()
 
     def token_usage_totals(self) -> dict[str, int]:

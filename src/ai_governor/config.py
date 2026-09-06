@@ -9,6 +9,12 @@ from typing import Any
 
 
 PERSISTED_SETTINGS_KEYS = (
+    "qwen_api_base",
+    "qwen_api_key",
+    "qwen_vision_model",
+    "qwen_reasoning_model",
+    # Retained only so existing local settings can be read without loss;
+    # runtime execution no longer selects DeepSeek.
     "deepseek_api_base",
     "deepseek_api_key",
     "deepseek_vision_model",
@@ -42,7 +48,7 @@ def load_persisted_settings(path: Path | None = None) -> dict[str, str]:
 
 
 def save_persisted_settings(values: dict[str, Any], path: Path | None = None) -> Path:
-    """Atomically save only user-facing DeepSeek settings outside the repo."""
+    """Atomically save provider settings outside the repository."""
     settings_path = path or user_settings_path()
     payload: dict[str, str] = {}
     for key in PERSISTED_SETTINGS_KEYS:
@@ -77,6 +83,12 @@ class Settings:
     allow_critical_actions: bool = False
     allow_live_input: bool = False
     game_window_title: str = "满庭芳：宋上繁华"
+    qwen_api_base: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    qwen_api_key: str | None = None
+    qwen_vision_model: str | None = None
+    qwen_reasoning_model: str | None = None
+    runtime_bridge_url: str = "http://127.0.0.1:18765"
+    runtime_telemetry_enabled: bool = False
     deepseek_api_base: str = "https://api.deepseek.com"
     deepseek_api_key: str | None = None
     deepseek_vision_model: str | None = None
@@ -105,6 +117,12 @@ class Settings:
             allow_critical_actions=_bool_env("GOVERNOR_ALLOW_CRITICAL_ACTIONS"),
             allow_live_input=_bool_env("GOVERNOR_ALLOW_LIVE_INPUT"),
             game_window_title=os.getenv("GOVERNOR_GAME_WINDOW_TITLE", cls.game_window_title),
+            qwen_api_base=(configured("QWEN_API_BASE", "qwen_api_base", cls.qwen_api_base) or cls.qwen_api_base).rstrip("/"),
+            qwen_api_key=configured("QWEN_API_KEY", "qwen_api_key"),
+            qwen_vision_model=configured("QWEN_VISION_MODEL", "qwen_vision_model"),
+            qwen_reasoning_model=configured("QWEN_REASONING_MODEL", "qwen_reasoning_model"),
+            runtime_bridge_url=os.getenv("GOVERNOR_RUNTIME_BRIDGE_URL", cls.runtime_bridge_url).rstrip("/"),
+            runtime_telemetry_enabled=_bool_env("GOVERNOR_RUNTIME_TELEMETRY"),
             deepseek_api_base=(configured("DEEPSEEK_API_BASE", "deepseek_api_base", cls.deepseek_api_base) or cls.deepseek_api_base).rstrip("/"),
             deepseek_api_key=configured("DEEPSEEK_API_KEY", "deepseek_api_key"),
             deepseek_vision_model=configured("DEEPSEEK_VISION_MODEL", "deepseek_vision_model"),

@@ -60,8 +60,10 @@ class StateAggregator:
     """Merge read-only memory and vision facts without hiding disagreements."""
 
     source_priority: tuple[tuple[str, int], ...] = (
+        ("runtime-telemetry", 110),
         ("readonly-memory", 100),
         ("deepseek-vision", 50),
+        ("qwen-vision", 50),
     )
 
     def aggregate(self, observations: Iterable[Observation]) -> CanonicalGameState:

@@ -41,7 +41,7 @@ class ReportService:
             "《满庭芳》AI Governor 当前状态",
             f"运行状态：{'已暂停' if paused else '运行中（{0}）'.format('需恢复确认' if recovery else 'dry-run')} ",
             f"今日动作记录：{self.store.today_action_count()}",
-            f"DeepSeek Token：{self.store.today_token_usage()['total_tokens']}",
+            f"Qwen Token：{self.store.today_token_usage()['total_tokens']}",
             f"最新观测区域：{observation.get('region', '无') if observation else '无'}",
         ]
         if state:
@@ -79,7 +79,7 @@ class ReportService:
             f"当前城市状态：{latest_state or '暂无观测'}",
             f"当前瓶颈：{', '.join(bottlenecks) if bottlenecks else '暂无规则可确认的负库存瓶颈'}",
             f"下一阶段目标：{self.store.active_goals()[0]['title'] if self.store.active_goals() else '尚未设置'}",
-            f"DeepSeek 用量：prompt={usage['prompt_tokens']}，completion={usage['completion_tokens']}，total={usage['total_tokens']}",
+            f"Qwen 用量：prompt={usage['prompt_tokens']}，completion={usage['completion_tokens']}，total={usage['total_tokens']}",
             "",
             "最近重大事件：",
             *([f"- {event['title']}：{event['body']}" for event in events] or ["- 暂无"]),

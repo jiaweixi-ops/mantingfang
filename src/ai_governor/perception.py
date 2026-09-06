@@ -97,7 +97,7 @@ class PerceptionEngine:
         return self._analyze(frame, region, context=context, crop_box=None)
 
     def observe_rgba(self, rgba: bytes, width: int, height: int, region_name: str, *, context: str = "") -> Observation:
-        """Crop a real client-area frame before sending it to DeepSeek."""
+        """Crop a real client-area frame before sending it to Qwen."""
         region = self.regions.get(region_name)
         return self._observe_region_rgba(rgba, width, height, region, context=context)
 
@@ -171,7 +171,7 @@ class PerceptionEngine:
             raise ValueError("vision confidence must be numeric")
         if crop_box is not None:
             result = {**result, "crop_box": crop_box}
-        return Observation(data=result, source="deepseek-vision", region=region.name, confidence=confidence)
+        return Observation(data=result, source="qwen-vision", region=region.name, confidence=confidence)
 
     @staticmethod
     def _validate_region_schema(result: dict[str, Any], region: RegionSpec) -> None:

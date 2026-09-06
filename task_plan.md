@@ -248,3 +248,14 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Copy only candidate files to ignored probe storage and inspect metadata/header/hash.
 - [x] Deserialize only the copy and cross-check `CityName`, `Year`, `Month`, `Gold`, `Villagers.Count`, `SceneData.Buildings.Count`, and `ShowRes`.
 - [x] Run tests/compileall/diff check; commit/push remains subject to the GitHub credential gate.
+
+## V2.3X3 Runtime Telemetry and Qwen Provider Migration (2026-09-06)
+
+- [x] Inspect the V5 ZIP in an isolated directory; do not overwrite the validated repository or trust placeholder adapters as real implementation.
+- [x] Add a generic Qwen chat/vision provider with retry, usage recording, and secret-safe errors.
+- [x] Migrate runtime configuration and overlay labels/settings to Qwen-only while preserving the existing live-input safety chain.
+- [x] Add a read-only runtime telemetry client/source with explicit `UNKNOWN/BLOCKED` behavior when the bridge is absent or schema is incomplete.
+- [x] Add a separately documented Windows/Mono bridge contract; do not install or inject it automatically until exact external assemblies are verified.
+- [x] Add tests for Qwen configuration/provider behavior and telemetry schema/fail-safe handling.
+- [x] Run pytest, compileall, and diff check; never arm Live or send game input.
+- [ ] Commit and push after checks; push may remain blocked by the GitHub credential gate.

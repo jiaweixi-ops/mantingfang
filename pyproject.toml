@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "songhua-ai-governor"
 version = "0.1.0"
-description = "Safe, DeepSeek-only automation foundation for 满庭芳：宋上繁华"
+description = "Safe, Qwen-only automation foundation for 满庭芳：宋上繁华"
 requires-python = ">=3.11"
 dependencies = []
 

@@ -1,8 +1,8 @@
 # 《满庭芳：宋上繁华》AI Governor
 
-这是一个面向 Steam Windows 版的本地自动经营基础工程，目标来自“满庭芳自动经营分析”方案：程序负责观察、持久化、执行和恢复，DeepSeek 负责视觉/战略推理，飞书自建应用负责双向远程控制。
+这是一个面向 Steam Windows 版的本地自动经营基础工程，目标来自“满庭芳自动经营分析”方案：程序负责观察、持久化、执行和恢复，Qwen 负责视觉/战略推理，飞书自建应用负责双向远程控制。
 
-当前版本是安全的 foundation scaffold：默认 `dry-run`，不会移动鼠标、输入键盘，也不会假装已经连接 Steam 或飞书。接入真实游戏前，需要完成窗口截图适配、游戏 UI 校准、执行后验证，以及用户自己的 DeepSeek/飞书凭据配置。
+当前版本是安全的 foundation scaffold：默认 `dry-run`，不会移动鼠标、输入键盘，也不会假装已经连接 Steam 或飞书。接入真实游戏前，需要完成窗口截图适配、游戏 UI 校准、执行后验证，以及用户自己的 Qwen/飞书凭据配置。
 
 ## 快速开始
 
@@ -22,16 +22,16 @@ py -3.11 -m venv .venv
 
 运行 `overlay` 会打开一个始终置顶、跟随《满庭芳》客户区移动的辅助窗口。按 `Home` 可以全局显示或隐藏窗口，即使当前焦点在游戏内也有效。
 
-点击“设置 DeepSeek”后可以填写并保存 API Base、API Key、视觉模型和推理模型。配置保存在当前 Windows 用户的 `%LOCALAPPDATA%\MantingfangAIGovernor\settings.json`，不会写入仓库或 Git；环境变量仍然可以覆盖保存值。
+点击“设置 Qwen”后可以填写并保存 API Base、API Key、视觉模型和推理模型。配置保存在当前 Windows 用户的 `%LOCALAPPDATA%\MantingfangAIGovernor\settings.json`，不会写入仓库或 Git；环境变量仍然可以覆盖保存值。
 
 浮窗中的“启动 AI 托管”默认使用 `dry-run`，不会发送真实鼠标键盘输入。托管子进程日志保存在 `data\overlay.log`。
 
 ## 当前边界
 
-- AI provider 只有 DeepSeek；没有 GPT、Claude、Qwen 或隐式备用模型。
+- AI provider 只有 Qwen；没有 GPT、Claude、DeepSeek 或隐式备用模型。
 - 视觉默认按 `resources`、`map`、`events`、`build_menu`、`dialog` 区域工作；复杂画面先定位再放大。
 - 数字状态可以通过 `memory-read` 接入显式的 Windows 只读内存 profile；地址必须由用户针对具体游戏版本校准，程序不猜地址、不做大范围扫描、不写进程内存。
-- 日报通过 `获取日报` 等命令按需生成；现在包含中国本地日界动作数、状态变化、动作摘要、瓶颈、下一目标和 DeepSeek Token 用量；重大事件通过 Feishu gateway 主动发送。
+- 日报通过 `获取日报` 等命令按需生成；现在包含中国本地日界动作数、状态变化、动作摘要、瓶颈、下一目标和 Qwen Token 用量；重大事件通过 Feishu gateway 主动发送。
 - 动作具有风险等级、幂等键、审计记录、暂停/恢复和恢复确认门槛。
 - `GOVERNOR_EXECUTION_MODE=live` 仍需要 `GOVERNOR_ALLOW_LIVE_INPUT=true`、运行时 `live_armed=true` 和语义验证器三重条件；默认 dry-run，不会自动开启真实输入。
 
@@ -42,7 +42,7 @@ src/ai_governor/
   actions.py       风险门、dry-run 执行器、动作队列
   cli.py           本地控制命令
   config.py        环境配置
-  deepseek.py      唯一 AI provider 适配器
+  qwen.py          唯一 AI provider 适配器（OpenAI-compatible Qwen API）
   feishu.py        双向命令/主动通知边界
   feishu_http.py   飞书自建应用 token、消息和事件 payload Transport
   memory.py        Windows 只读内存采样与 profile 校验
@@ -56,6 +56,7 @@ src/ai_governor/
   loop.py           变化检测、心跳和恢复态长运行循环
   models.py        状态、目标、动作、事件模型
   perception.py    区域化视觉接口
+  telemetry.py     只读 Unity/Mono 运行时遥测客户端
   reporting.py     状态/日报
   storage.py       SQLite 状态与审计
   watchdog.py      暂停、恢复、心跳
@@ -78,13 +79,13 @@ py -3 -m ai_governor.cli capture --out screenshots/current.png
 
 `memory-modules` 只用于列出目标进程的已加载模块，帮助建立版本校准证据。Windows 可能因进程完整性级别或权限返回访问拒绝；此时工具会失败并报告错误，不会降级为任意内存扫描。
 
-`StateAggregator` 将 `readonly-memory` 作为数字字段的高优先级来源，将 DeepSeek 区域视觉作为补充来源；同一字段不一致时保留内存优先结果，同时在 `conflicts` 中记录两份证据，供策略层决定是否暂停。
+`StateAggregator` 将 `runtime-telemetry` 作为最高优先级来源，将 `readonly-memory` 作为数字字段的高优先级来源，将 Qwen 区域视觉作为补充来源；同一字段不一致时保留高优先级结果，同时在 `conflicts` 中记录多份证据，供策略层决定是否暂停。
 
-Governor 发给 DeepSeek Chat Completions 的用户上下文会序列化为 UTF-8 JSON 文本；这样既保留结构化状态，又符合 Chat API 对 `messages[].content` 的类型要求。视觉请求仍使用文本与 `image_url` content-parts。
+Governor 发给 Qwen OpenAI-compatible Chat Completions 的用户上下文会序列化为 UTF-8 JSON 文本；这样既保留结构化状态，又符合 Chat API 对 `messages[].content` 的类型要求。视觉请求仍使用文本与 `image_url` content-parts。
 
 `window-info` 只检查窗口和客户区，不会激活、点击或输入游戏。
 
-`capture` 使用窗口级 Windows Graphics Capture（WGC）读取 Song 客户区并保存 PNG；窗口不存在、最小化或 WGC 捕获失败时会返回错误，不会静默降级到 GDI、PrintWindow 或桌面截图。实机视觉路径应将 `CapturedFrame.rgba` 传给 `PerceptionEngine.observe_rgba()`，由程序先裁剪 ROI，再调用 DeepSeek。
+`capture` 使用窗口级 Windows Graphics Capture（WGC）读取 Song 客户区并保存 PNG；窗口不存在、最小化或 WGC 捕获失败时会返回错误，不会静默降级到 GDI、PrintWindow 或桌面截图。实机视觉路径应将 `CapturedFrame.rgba` 传给 `PerceptionEngine.observe_rgba()`，由程序先裁剪 ROI，再调用 Qwen。
 
 Windows 客户区截图默认只使用 `SRCCOPY`，不会把 `CAPTUREBLT` 加入正常 Governor/E2E 路径。命令输出还包含 HWND、客户区尺寸、后端、光栅模式和近黑帧诊断；近黑帧会标记为 `CAPTURE_BLACK_FRAME`，不会自动退回到 `CAPTUREBLT`。
 
@@ -94,7 +95,15 @@ Windows 客户区截图默认只使用 `SRCCOPY`，不会把 `CAPTUREBLT` 加入
 py -3 -m pip install -e ".[windows-capture]"
 ```
 
-`capture-diagnostic` 会在 `data/e2e/` 生成 GDI、PrintWindow、WGC 三种只读对比和 JSON 诊断；GDI/PrintWindow 仅供诊断，生产路径固定选择 WGC。`vision-probe` 使用临时安全 PNG 验证 DeepSeek Vision 的 HTTP、JSON、usage 和图片消息结构。
+`capture-diagnostic` 会在 `data/e2e/` 生成 GDI、PrintWindow、WGC 三种只读对比和 JSON 诊断；GDI/PrintWindow 仅供诊断，生产路径固定选择 WGC。`vision-probe` 使用临时安全 PNG 验证 Qwen Vision 的 HTTP、JSON、usage 和图片消息结构。
+
+只读运行时桥接可以通过以下命令检查；没有桥接或桥接返回 `UNKNOWN/BLOCKED` 时命令失败并报告未知状态，不会用 0 值伪造城市数据：
+
+```powershell
+py -3 -m ai_governor.cli telemetry-read
+```
+
+桥接协议和 Unity Mono 适配边界记录在 `runtime_bridge/README.md`。当前仓库不携带 BepInEx/Unity 第三方运行时依赖，也不会自动注入游戏进程；必须先由用户在本机完成版本匹配的只读桥接，再开启 `GOVERNOR_RUNTIME_TELEMETRY=true`。
 
 只读真实 Steam 预检可以等待用户自行把游戏置于前台；程序不抢焦点、不发送输入：
 
@@ -114,7 +123,7 @@ py -3 -m ai_governor.cli e2e-preflight --title Song --wait-for-game-foreground
 
 `CompositeObservationSource` 可以在同一轮合并内存和多区域视觉观测；`InputActionExecutor` 只接受白名单输入技能，并可在动作前后采集状态交给 `SemanticStateVerifier`。截图可用性验证不再被视为 live 动作成功的充分条件。
 
-DeepSeek 客户端对网络超时、408、429 和 5xx 使用指数退避重试，并将返回的 prompt/completion/total tokens 记录到 SQLite；失败次数耗尽后仍会明确进入恢复路径。
+Qwen 客户端对网络超时、408、429 和 5xx 使用指数退避重试，并将返回的 prompt/completion/total tokens 记录到 SQLite；失败次数耗尽后仍会明确进入恢复路径。
 
 运行入口为 `run`：它会连接配置的 Steam 窗口、采集多区域视觉并可选读取显式内存 profile。`run` 默认继承 `GOVERNOR_EXECUTION_MODE=dry-run`；live 模式还必须先执行 `arm-live`，且每个动作需要语义状态验证。使用 `disarm-live` 可立即撤销运行时 arm 状态。加 `--supervise` 后，只有未捕获异常才会按上限重启；安全暂停或 `recovery_required` 不会被自动清除。
 

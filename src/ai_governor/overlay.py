@@ -121,7 +121,7 @@ class OverlayApp:
         self.start_button.pack(side="left")
         self.stop_button = ttk.Button(buttons, text="停止托管", command=self.stop_governor, state="disabled")
         self.stop_button.pack(side="left", padx=(8, 0))
-        ttk.Button(buttons, text="设置 DeepSeek", command=self.open_settings).pack(side="right")
+        ttk.Button(buttons, text="设置 Qwen", command=self.open_settings).pack(side="right")
 
     def _poll_hotkey(self) -> None:
         if self.hotkey is not None and self.hotkey.poll():
@@ -151,8 +151,8 @@ class OverlayApp:
 
     def _refresh_status(self) -> None:
         settings = Settings.from_env()
-        configured = bool(settings.deepseek_api_key and settings.deepseek_reasoning_model and settings.deepseek_vision_model)
-        self.config_var.set("DeepSeek：已配置" if configured else "DeepSeek：未完成配置，请点击“设置 DeepSeek”")
+        configured = bool(settings.qwen_api_key and settings.qwen_reasoning_model and settings.qwen_vision_model)
+        self.config_var.set("Qwen：已配置" if configured else "Qwen：未完成配置，请点击“设置 Qwen”")
         if self.process is not None:
             exit_code = self.process.poll()
             if exit_code is None:
@@ -178,7 +178,7 @@ class OverlayApp:
             return
         dialog = tk.Toplevel(self.root)
         self._settings_dialog = dialog
-        dialog.title("DeepSeek 设置")
+        dialog.title("Qwen 设置")
         dialog.resizable(False, False)
         dialog.transient(self.root)
         dialog.grab_set()
@@ -188,21 +188,21 @@ class OverlayApp:
         saved = load_persisted_settings()
         current = Settings.from_env()
         values = {
-            "deepseek_api_base": saved.get("deepseek_api_base", current.deepseek_api_base),
-            "deepseek_api_key": saved.get("deepseek_api_key", current.deepseek_api_key or ""),
-            "deepseek_vision_model": saved.get("deepseek_vision_model", current.deepseek_vision_model or ""),
-            "deepseek_reasoning_model": saved.get("deepseek_reasoning_model", current.deepseek_reasoning_model or ""),
+            "qwen_api_base": saved.get("qwen_api_base", current.qwen_api_base),
+            "qwen_api_key": saved.get("qwen_api_key", current.qwen_api_key or ""),
+            "qwen_vision_model": saved.get("qwen_vision_model", current.qwen_vision_model or ""),
+            "qwen_reasoning_model": saved.get("qwen_reasoning_model", current.qwen_reasoning_model or ""),
         }
         labels = {
-            "deepseek_api_base": "API Base",
-            "deepseek_api_key": "API Key",
-            "deepseek_vision_model": "视觉模型",
-            "deepseek_reasoning_model": "推理模型",
+            "qwen_api_base": "API Base",
+            "qwen_api_key": "API Key",
+            "qwen_vision_model": "视觉模型",
+            "qwen_reasoning_model": "推理模型",
         }
         entries: dict[str, ttk.Entry] = {}
         for row, key in enumerate(values):
             ttk.Label(frame, text=labels[key]).grid(row=row, column=0, sticky="w", padx=(0, 10), pady=5)
-            entry = ttk.Entry(frame, width=46, show="*" if key == "deepseek_api_key" else "")
+            entry = ttk.Entry(frame, width=46, show="*" if key == "qwen_api_key" else "")
             entry.insert(0, values[key])
             entry.grid(row=row, column=1, sticky="ew", pady=5)
             entries[key] = entry
@@ -232,10 +232,10 @@ class OverlayApp:
         values = {key: entry.get().strip() for key, entry in entries.items()}
         save_persisted_settings(values)
         env_names = {
-            "deepseek_api_base": "DEEPSEEK_API_BASE",
-            "deepseek_api_key": "DEEPSEEK_API_KEY",
-            "deepseek_vision_model": "DEEPSEEK_VISION_MODEL",
-            "deepseek_reasoning_model": "DEEPSEEK_REASONING_MODEL",
+            "qwen_api_base": "QWEN_API_BASE",
+            "qwen_api_key": "QWEN_API_KEY",
+            "qwen_vision_model": "QWEN_VISION_MODEL",
+            "qwen_reasoning_model": "QWEN_REASONING_MODEL",
         }
         for key, env_name in env_names.items():
             if values[key]:
@@ -253,14 +253,14 @@ class OverlayApp:
         missing = [
             name
             for name, value in (
-                ("DEEPSEEK_API_KEY", settings.deepseek_api_key),
-                ("DEEPSEEK_REASONING_MODEL", settings.deepseek_reasoning_model),
-                ("DEEPSEEK_VISION_MODEL", settings.deepseek_vision_model),
+                ("QWEN_API_KEY", settings.qwen_api_key),
+                ("QWEN_REASONING_MODEL", settings.qwen_reasoning_model),
+                ("QWEN_VISION_MODEL", settings.qwen_vision_model),
             )
             if not value
         ]
         if missing:
-            messagebox.showwarning("DeepSeek 配置不完整", "请先填写：" + "、".join(missing), parent=self.root)
+            messagebox.showwarning("Qwen 配置不完整", "请先填写：" + "、".join(missing), parent=self.root)
             self.open_settings()
             return
         if self.process is not None and self.process.poll() is None:

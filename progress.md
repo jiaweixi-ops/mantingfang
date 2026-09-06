@@ -248,3 +248,17 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Read-only .NET Framework parsing confirmed `RecordData` metadata and `RootData` state. Extracted city name, year/month, gold, core resources, population count, building count, and visible-resource count.
 - Cross-check: `新的城市`, year 1, gold 1000, rice/vegetable 50, wood/stone 100, and population 10 agree with the new-city HUD values observed before saving; month 4 is the serialized zero-based month index.
 - V2.3X2 is PASS. No Live E2E, no `arm-live`, no mouse/keyboard input, and no process-memory write.
+
+## 2026-09-06 — V2.3X3 scope resumed from latest conversation
+
+- Read the latest conversation turns and inspected `Mantingfang_AI_Governor_V5_Full.zip` in an isolated temporary directory.
+- The ZIP contains useful direction but several placeholders: its SaveInspector returns `adapter_ready` without parsing, and its RuntimeBridge requires external BepInEx/Unity references not included in the archive. It will not be copied wholesale.
+- New implementation scope is Qwen-only provider/config migration plus a fail-safe read-only telemetry client and a separately buildable bridge reference. Existing WGC, Win32 input audit, foreground/PID gates, save extraction, and Live E2E fail-safe behavior remain protected.
+
+## 2026-09-06 — V2.3X3 Qwen and read-only telemetry implementation
+
+- Added `QwenClient` using the standard library against the OpenAI-compatible Qwen Chat Completions endpoint, with retry, usage accounting, image content-parts, and API-key-safe errors.
+- Migrated runtime Governor, Vision, overlay settings, reports, `.env.example`, README, and CLI help to Qwen configuration; retained old DeepSeek fields/module only as local compatibility data and test doubles, not as the production provider.
+- Added `RuntimeTelemetryClient`, `RuntimeTelemetryObservationSource`, and `telemetry-read`. Missing bridge or `UNKNOWN/BLOCKED` state fails closed and never fabricates zero values.
+- Added `runtime_bridge/README.md` with the loopback-only, read-only `/health` and `/state` contract. The supplied V5 bridge remains reference-only because its BepInEx/Unity assemblies are not installed or verified here.
+- Added provider/telemetry tests, including rejection of incomplete `status=OK` snapshots. Verification: `107 passed`, `python -m compileall -q src` PASS, `git diff --check` PASS. No Live E2E, `arm-live`, mouse/keyboard input, process-memory write, or secret file was used.

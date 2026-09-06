@@ -15,7 +15,7 @@ from .capture import (
     Win32ClientCaptureBackend,
     encode_rgba_png,
 )
-from .deepseek import DeepSeekConfigurationError, DeepSeekRequestError, DeepSeekClient
+from .qwen import QwenConfigurationError, QwenRequestError, QwenClient
 from .e2e import (
     BuildMenuE2EHarness,
     E2EConfigurationError,
@@ -63,7 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
     server = sub.add_parser("feishu-server", help="serve Feishu callback events locally")
     server.add_argument("--host", default="127.0.0.1")
     server.add_argument("--port", type=int, default=8787)
-    run = sub.add_parser("run", help="run the DeepSeek Governor loop")
+    run = sub.add_parser("run", help="run the Qwen Governor loop")
     run.add_argument("--max-cycles", type=int, help="stop after this many cycles; omit for continuous run")
     run.add_argument("--interval", type=float, default=10.0, help="seconds between cycles")
     run.add_argument("--region", action="append", dest="regions", help="vision region; repeat for multiple regions")
@@ -125,7 +125,8 @@ def build_parser() -> argparse.ArgumentParser:
     diagnostic = sub.add_parser("capture-diagnostic", help="compare GDI, PrintWindow, and WGC without input")
     diagnostic.add_argument("--title", help="exact window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
     diagnostic.add_argument("--output-dir", default="data/e2e")
-    probe = sub.add_parser("vision-probe", help="send a safe temporary PNG to the configured DeepSeek Vision model")
+    probe = sub.add_parser("vision-probe", help="send a safe temporary PNG to the configured Qwen Vision model")
+    telemetry = sub.add_parser("telemetry-read", help="read the configured local runtime telemetry bridge without input")
     probe.add_argument("--out", help="optional safe probe PNG path")
     memory_read = sub.add_parser("memory-read", help="read only fields from an explicit memory profile")
     memory_read.add_argument("--profile", help="JSON memory profile; defaults to GOVERNOR_MEMORY_PROFILE")
@@ -141,6 +142,15 @@ def main(argv: list[str] | None = None) -> int:
         from dataclasses import replace
         settings = replace(settings, db_path=Path(args.db))
     settings.ensure_directories()
+    if args.command == "telemetry-read":
+        from .telemetry import RuntimeTelemetryClient, RuntimeTelemetryError
+        try:
+            client = RuntimeTelemetryClient(settings.runtime_bridge_url)
+            print(json.dumps({"health": client.health(), "state": client.read()}, ensure_ascii=False, indent=2))
+        except RuntimeTelemetryError as exc:
+            print(json.dumps({"status": "UNKNOWN", "error": str(exc)}, ensure_ascii=False))
+            return 2
+        return 0
     if args.command == "overlay":
         from .overlay import run_overlay
         return run_overlay()
@@ -236,11 +246,11 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0 if report["wgc"].get("success") else 2
     if args.command == "vision-probe":
-        if not settings.deepseek_api_key:
-            print("ERROR: DEEPSEEK_API_KEY is not configured", file=sys.stderr)
+        if not settings.qwen_api_key:
+            print("ERROR: QWEN_API_KEY is not configured", file=sys.stderr)
             return 2
-        if not settings.deepseek_vision_model:
-            print("ERROR: DEEPSEEK_VISION_MODEL is not configured", file=sys.stderr)
+        if not settings.qwen_vision_model:
+            print("ERROR: QWEN_VISION_MODEL is not configured", file=sys.stderr)
             return 2
         rgba = bytes((32, 96, 160, 255)) * (32 * 32)
         png = encode_rgba_png(32, 32, rgba)
@@ -248,18 +258,18 @@ def main(argv: list[str] | None = None) -> int:
             probe_path = Path(args.out)
             probe_path.parent.mkdir(parents=True, exist_ok=True)
             probe_path.write_bytes(png)
-        client = DeepSeekClient(settings.deepseek_api_base, settings.deepseek_api_key, settings.deepseek_vision_model)
+        client = QwenClient(settings.qwen_api_base, settings.qwen_api_key, settings.qwen_vision_model)
         try:
             response = client.analyze_image_json(
                 png,
                 '返回 JSON：{"vision_probe": true}。只输出 JSON，不要解释。',
-                model=settings.deepseek_vision_model,
+                model=settings.qwen_vision_model,
             )
-        except DeepSeekRequestError as exc:
+        except QwenRequestError as exc:
             print(json.dumps({
                 "status": "FAIL",
-                "api_base": settings.deepseek_api_base,
-                "model": settings.deepseek_vision_model,
+                "api_base": settings.qwen_api_base,
+                "model": settings.qwen_vision_model,
                 "http_status": exc.status_code,
                 "error_type": exc.error_type,
                 "error": str(exc),
@@ -267,8 +277,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         print(json.dumps({
             "status": "PASS",
-            "api_base": settings.deepseek_api_base,
-            "model": settings.deepseek_vision_model,
+            "api_base": settings.qwen_api_base,
+            "model": settings.qwen_vision_model,
             "http_status": 200,
             "json": response,
             "usage": client.last_usage.to_dict() if client.last_usage else None,
@@ -337,7 +347,7 @@ def main(argv: list[str] | None = None) -> int:
                     cycles = supervisor.run(max_cycles=args.max_cycles)
                 else:
                     cycles = runtime.loop.run(max_cycles=args.max_cycles)
-            except (RuntimeConfigurationError, DeepSeekConfigurationError, MemoryConfigurationError, MemoryAccessError, UnsupportedPlatformError, WindowError, CaptureError, OSError, ValueError) as exc:
+            except (RuntimeConfigurationError, QwenConfigurationError, MemoryConfigurationError, MemoryAccessError, UnsupportedPlatformError, WindowError, CaptureError, OSError, ValueError) as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 2
             print(json.dumps([cycle.__dict__ for cycle in cycles], ensure_ascii=False, indent=2))
@@ -368,7 +378,7 @@ def main(argv: list[str] | None = None) -> int:
                     close_region=args.close_region or close_target.get("region"),
                     close_element=args.close_element or close_target.get("canonical_id"),
                 ).run(attempts=args.attempts, confirm_live=args.confirm_live_e2e)
-            except (E2EConfigurationError, E2EPreflightError, RuntimeConfigurationError, DeepSeekConfigurationError, MemoryConfigurationError, MemoryAccessError, UnsupportedPlatformError, WindowError, CaptureError, OSError, ValueError) as exc:
+            except (E2EConfigurationError, E2EPreflightError, RuntimeConfigurationError, QwenConfigurationError, MemoryConfigurationError, MemoryAccessError, UnsupportedPlatformError, WindowError, CaptureError, OSError, ValueError) as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 2
             print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -382,7 +392,7 @@ def main(argv: list[str] | None = None) -> int:
                     output_dir=Path(args.output_dir),
                     window_title=args.title,
                 )
-            except (E2EPreflightError, DeepSeekConfigurationError, WindowError, CaptureError, OSError, ValueError) as exc:
+            except (E2EPreflightError, QwenConfigurationError, WindowError, CaptureError, OSError, ValueError) as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 2
             print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -396,7 +406,7 @@ def main(argv: list[str] | None = None) -> int:
                     output_dir=Path(args.output_dir),
                     window_title=args.title,
                 )
-            except (E2EConfigurationError, E2EPreflightError, DeepSeekConfigurationError, WindowError, CaptureError, OSError, ValueError) as exc:
+            except (E2EConfigurationError, E2EPreflightError, QwenConfigurationError, WindowError, CaptureError, OSError, ValueError) as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 2
             print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -415,7 +425,7 @@ def main(argv: list[str] | None = None) -> int:
                     poll_seconds=args.poll_seconds,
                     wait_for_game_foreground=args.wait_for_game_foreground,
                 )
-            except (E2EConfigurationError, E2EPreflightError, DeepSeekConfigurationError, WindowError, CaptureError, OSError, ValueError) as exc:
+            except (E2EConfigurationError, E2EPreflightError, QwenConfigurationError, WindowError, CaptureError, OSError, ValueError) as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 2
             print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -434,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
                     poll_seconds=args.poll_seconds,
                     wait_for_game_foreground=args.wait_for_game_foreground,
                 )
-            except (E2EConfigurationError, E2EPreflightError, DeepSeekConfigurationError, WindowError, CaptureError, OSError, ValueError) as exc:
+            except (E2EConfigurationError, E2EPreflightError, QwenConfigurationError, WindowError, CaptureError, OSError, ValueError) as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 2
             print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -453,7 +463,7 @@ def main(argv: list[str] | None = None) -> int:
                     poll_seconds=args.poll_seconds,
                     wait_for_game_foreground=args.wait_for_game_foreground,
                 )
-            except (E2EConfigurationError, E2EPreflightError, DeepSeekConfigurationError, WindowError, CaptureError, OSError, ValueError) as exc:
+            except (E2EConfigurationError, E2EPreflightError, QwenConfigurationError, WindowError, CaptureError, OSError, ValueError) as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 2
             print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -470,7 +480,7 @@ def main(argv: list[str] | None = None) -> int:
                     output_dir=Path(args.output_dir),
                     window_title=args.title,
                 )
-            except (E2EPreflightError, DeepSeekConfigurationError, WindowError, CaptureBlackFrameError, CaptureError, OSError, ValueError) as exc:
+            except (E2EPreflightError, QwenConfigurationError, WindowError, CaptureBlackFrameError, CaptureError, OSError, ValueError) as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 2
             print(json.dumps(result, ensure_ascii=False, indent=2))

@@ -66,7 +66,7 @@ class Governor:
             {
                 "role": "system",
                 "content": (
-                    "你是《满庭芳：宋上繁华》的唯一 DeepSeek 城市治理大脑。"
+                    "你是《满庭芳：宋上繁华》的唯一 Qwen 城市治理大脑。"
                     "只根据已观测事实和当前目标生成 JSON action plan；不要编造看不到的状态。"
                     "高风险剧情、战争、不可逆政策使用 critical，程序会阻止它们。"
                     "可用游戏 Skill 只有："

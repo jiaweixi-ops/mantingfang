@@ -8,7 +8,7 @@ from typing import Callable, Iterable
 from .actions import ActionEngine, DryRunExecutor
 from .capture import CapturedFrame, ClientAreaCapture, WindowsGraphicsCaptureBackend
 from .config import Settings
-from .deepseek import DeepSeekClient, DeepSeekConfigurationError
+from .qwen import QwenClient, QwenConfigurationError
 from .events import MajorEventCoordinator, MajorEventDetector
 from .feishu import CommandRouter, FeishuGateway
 from .feishu_http import FeishuApiClient, FeishuHttpTransport
@@ -21,6 +21,7 @@ from .reporting import ReportService
 from .skills import InputActionExecutor, SkillTranslator
 from .state import StateAggregator
 from .storage import SQLiteStore
+from .telemetry import RuntimeTelemetryClient, RuntimeTelemetryObservationSource
 from .verification import SemanticStateVerifier
 from .watchdog import Watchdog
 from .window import SteamWindowAdapter, Win32WindowBackend
@@ -117,25 +118,28 @@ class GovernorRuntime:
 
 
 def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str] = ("resources", "map", "events", "build_menu", "dialog")) -> GovernorRuntime:
-    if not settings.deepseek_api_key:
-        raise DeepSeekConfigurationError("DEEPSEEK_API_KEY is not configured; run requires a real DeepSeek endpoint")
-    if not settings.deepseek_reasoning_model:
-        raise DeepSeekConfigurationError("DEEPSEEK_REASONING_MODEL is not configured")
-    if not settings.deepseek_vision_model:
-        raise DeepSeekConfigurationError("DEEPSEEK_VISION_MODEL is not configured")
-    client = DeepSeekClient(
-        settings.deepseek_api_base,
-        settings.deepseek_api_key,
-        settings.deepseek_reasoning_model,
+    if not settings.qwen_api_key:
+        raise QwenConfigurationError("QWEN_API_KEY is not configured; run requires a real Qwen endpoint")
+    if not settings.qwen_reasoning_model:
+        raise QwenConfigurationError("QWEN_REASONING_MODEL is not configured")
+    if not settings.qwen_vision_model:
+        raise QwenConfigurationError("QWEN_VISION_MODEL is not configured")
+    client = QwenClient(
+        settings.qwen_api_base,
+        settings.qwen_api_key,
+        settings.qwen_reasoning_model,
         usage_callback=store.record_token_usage,
     )
     window = SteamWindowAdapter(settings.game_window_title, Win32WindowBackend())
     # Production perception is window-scoped WGC.  If WGC is unavailable or
     # fails, propagate the error; never silently reintroduce GDI/desktop capture.
     capture = ClientAreaCapture(window, WindowsGraphicsCaptureBackend(), reject_near_black=True)
-    perception = PerceptionEngine(client, RegionCatalog(), model=settings.deepseek_vision_model)
+    perception = PerceptionEngine(client, RegionCatalog(), model=settings.qwen_vision_model)
     vision_source = SteamVisionObservationSource(capture, perception, tuple(regions))
-    sources = [vision_source]
+    sources = []
+    if settings.runtime_telemetry_enabled:
+        sources.append(RuntimeTelemetryObservationSource(RuntimeTelemetryClient(settings.runtime_bridge_url)))
+    sources.append(vision_source)
     if settings.memory_profile_path is not None:
         profile = MemoryProfile.from_json(settings.memory_profile_path)
         sources.append(MemoryObservationSource(MemorySampler(profile, WindowsProcessEnumerator(), WindowsMemoryBackend())))
@@ -215,7 +219,7 @@ def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str]
         client,
         actions,
         watchdog,
-        model=settings.deepseek_reasoning_model,
+        model=settings.qwen_reasoning_model,
         state_aggregator=aggregator,
         major_event_handler=event_coordinator.handle,
     )

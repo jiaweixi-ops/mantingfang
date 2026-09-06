@@ -87,7 +87,7 @@ def test_daily_report_includes_local_summary_and_state_delta(store: SQLiteStore,
     report = ReportService(store).daily_report()
     assert "今天完成了什么" in report
     assert "population" in report and "10 → 12" in report
-    assert "DeepSeek 用量" in report and "total=25" in report
+    assert "Qwen 用量" in report and "total=25" in report
 
 
 def test_deepseek_client_records_usage_without_network() -> None:

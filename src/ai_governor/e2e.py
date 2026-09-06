@@ -10,7 +10,7 @@ from uuid import uuid4
 from .actions import ActionEngine
 from .capture import CaptureError, ClientAreaCapture, WindowsGraphicsCaptureBackend, encode_rgba_png
 from .config import Settings
-from .deepseek import DeepSeekClient, DeepSeekConfigurationError
+from .qwen import QwenClient, QwenConfigurationError
 from .input import InputCommand, WindowsSendInputAdapter, Win32SendInputBackend
 from .models import ActionPlan, PlannedAction, RegionSpec
 from .perception import PerceptionEngine, RegionCatalog
@@ -24,6 +24,29 @@ class E2EConfigurationError(RuntimeError):
 
 class E2EPreflightError(RuntimeError):
     pass
+
+
+# Compatibility aliases keep existing test doubles and older callers stable;
+# all production E2E requests now use the Qwen-compatible client and settings.
+DeepSeekClient = QwenClient
+DeepSeekConfigurationError = QwenConfigurationError
+
+
+def _qwen_runtime_config(settings: Settings) -> tuple[str, str, str]:
+    """Return Qwen settings, with a narrow legacy-fixture fallback.
+
+    Older local tests construct Settings with the pre-migration DeepSeek field
+    names. The fallback keeps those tests deterministic without changing the
+    production Settings.from_env path, which requires QWEN_* configuration.
+    """
+    api_base = settings.qwen_api_base
+    api_key = settings.qwen_api_key
+    model = settings.qwen_vision_model
+    if api_key and model:
+        return api_base, api_key, model
+    if settings.deepseek_api_key and settings.deepseek_vision_model:
+        return settings.deepseek_api_base, settings.deepseek_api_key, settings.deepseek_vision_model
+    raise QwenConfigurationError("QWEN_API_KEY and QWEN_VISION_MODEL are not configured")
 
 
 def _preflight_observation_summary(data: dict[str, Any]) -> dict[str, Any]:
@@ -297,10 +320,7 @@ def calibrate_build_menu_state(
     """Read-only calibration for one explicit build-menu state."""
     if state not in {"open", "closed"}:
         raise E2EPreflightError("calibration state must be open or closed")
-    if not settings.deepseek_api_key:
-        raise DeepSeekConfigurationError("DEEPSEEK_API_KEY is not configured")
-    if not settings.deepseek_vision_model:
-        raise DeepSeekConfigurationError("DEEPSEEK_VISION_MODEL is not configured")
+    api_base, api_key, vision_model = _qwen_runtime_config(settings)
     output_dir.mkdir(parents=True, exist_ok=True)
     window_backend = Win32WindowBackend()
     selected_title = window_title or settings.game_window_title
@@ -315,12 +335,12 @@ def calibrate_build_menu_state(
     capture = ClientAreaCapture(window, WindowsGraphicsCaptureBackend())
     frame = capture.capture()
     client = DeepSeekClient(
-        settings.deepseek_api_base,
-        settings.deepseek_api_key,
-        settings.deepseek_vision_model,
+        api_base,
+        api_key,
+        vision_model,
         usage_callback=store.record_token_usage,
     )
-    perception = PerceptionEngine(client, RegionCatalog(), model=settings.deepseek_vision_model)
+    perception = PerceptionEngine(client, RegionCatalog(), model=vision_model)
     catalog = RegionCatalog()
     runtime_region_name = _runtime_region_for_state(state)
     runtime_region = catalog.get(runtime_region_name)
@@ -483,10 +503,7 @@ def resolve_build_menu_target(
     """Resolve one calibrated target from the current frame without input."""
     if state not in {"open", "closed"}:
         raise E2EPreflightError("resolver state must be open or closed")
-    if not settings.deepseek_api_key:
-        raise DeepSeekConfigurationError("DEEPSEEK_API_KEY is not configured")
-    if not settings.deepseek_vision_model:
-        raise DeepSeekConfigurationError("DEEPSEEK_VISION_MODEL is not configured")
+    api_base, api_key, vision_model = _qwen_runtime_config(settings)
     output_dir.mkdir(parents=True, exist_ok=True)
     calibration_path = output_dir / "build_menu_calibration.json"
     if not calibration_path.exists():
@@ -525,12 +542,12 @@ def resolve_build_menu_target(
     if diagnostic.get("near_black_frame"):
         raise E2EPreflightError("CAPTURE_BLACK_FRAME")
     client = DeepSeekClient(
-        settings.deepseek_api_base,
-        settings.deepseek_api_key,
-        settings.deepseek_vision_model,
+        api_base,
+        api_key,
+        vision_model,
         usage_callback=store.record_token_usage,
     )
-    perception = PerceptionEngine(client, RegionCatalog(), model=settings.deepseek_vision_model)
+    perception = PerceptionEngine(client, RegionCatalog(), model=vision_model)
     observation = perception.observe_rgba(
         frame.rgba,
         frame.width,
@@ -836,13 +853,14 @@ def run_live_build_menu_roundtrip(
         backend = Win32WindowBackend()
         window = _locate_game_window(settings, backend, window_title)
         capture = ClientAreaCapture(window, WindowsGraphicsCaptureBackend(), reject_near_black=True)
+        api_base, api_key, vision_model = _qwen_runtime_config(settings)
         client = DeepSeekClient(
-            settings.deepseek_api_base,
-            settings.deepseek_api_key,
-            settings.deepseek_vision_model,
+            api_base,
+            api_key,
+            vision_model,
             usage_callback=store.record_token_usage,
         )
-        perception = PerceptionEngine(client, RegionCatalog(), model=settings.deepseek_vision_model)
+        perception = PerceptionEngine(client, RegionCatalog(), model=vision_model)
         if wait_for_game_foreground:
             info = window.wait_for_foreground(
                 timeout_seconds=foreground_timeout_seconds,
@@ -1126,13 +1144,14 @@ def run_live_build_menu_open_only(
         backend = Win32WindowBackend()
         window = _locate_game_window(settings, backend, window_title)
         capture = ClientAreaCapture(window, WindowsGraphicsCaptureBackend(), reject_near_black=True)
+        api_base, api_key, vision_model = _qwen_runtime_config(settings)
         client = DeepSeekClient(
-            settings.deepseek_api_base,
-            settings.deepseek_api_key,
-            settings.deepseek_vision_model,
+            api_base,
+            api_key,
+            vision_model,
             usage_callback=store.record_token_usage,
         )
-        perception = PerceptionEngine(client, RegionCatalog(), model=settings.deepseek_vision_model)
+        perception = PerceptionEngine(client, RegionCatalog(), model=vision_model)
         if wait_for_game_foreground:
             info = window.wait_for_foreground(
                 timeout_seconds=foreground_timeout_seconds,
@@ -1323,13 +1342,14 @@ def run_live_build_menu_close_only(
         backend = Win32WindowBackend()
         window = _locate_game_window(settings, backend, window_title)
         capture = ClientAreaCapture(window, WindowsGraphicsCaptureBackend(), reject_near_black=True)
+        api_base, api_key, vision_model = _qwen_runtime_config(settings)
         client = DeepSeekClient(
-            settings.deepseek_api_base,
-            settings.deepseek_api_key,
-            settings.deepseek_vision_model,
+            api_base,
+            api_key,
+            vision_model,
             usage_callback=store.record_token_usage,
         )
-        perception = PerceptionEngine(client, RegionCatalog(), model=settings.deepseek_vision_model)
+        perception = PerceptionEngine(client, RegionCatalog(), model=vision_model)
         if wait_for_game_foreground:
             info = window.wait_for_foreground(
                 timeout_seconds=foreground_timeout_seconds,
@@ -1500,10 +1520,7 @@ def run_read_only_preflight(
     window_title: str | None = None,
 ) -> dict[str, Any]:
     """Wait for the real game window and perform capture/Vision checks only."""
-    if not settings.deepseek_api_key:
-        raise DeepSeekConfigurationError("DEEPSEEK_API_KEY is not configured")
-    if not settings.deepseek_vision_model:
-        raise DeepSeekConfigurationError("DEEPSEEK_VISION_MODEL is not configured")
+    api_base, api_key, vision_model = _qwen_runtime_config(settings)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     backend = Win32WindowBackend()
@@ -1581,12 +1598,12 @@ def run_read_only_preflight(
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     client = DeepSeekClient(
-        settings.deepseek_api_base,
-        settings.deepseek_api_key,
-        settings.deepseek_vision_model,
+        api_base,
+        api_key,
+        vision_model,
         usage_callback=store.record_token_usage,
     )
-    perception = PerceptionEngine(client, RegionCatalog(), model=settings.deepseek_vision_model)
+    perception = PerceptionEngine(client, RegionCatalog(), model=vision_model)
     observations: dict[str, dict[str, Any]] = {}
     for region_name in ("build_menu", "dialog"):
         try:
