@@ -219,6 +219,14 @@
 - The client reported connected and disconnected successfully. After disconnect, the same game PID remained responsive, still owned the sole loopback listener, and established connections returned to zero. Stderr was empty.
 - Verdict: `MONO_DEBUGGER_ASSEMBLY_ENUM=PASS` with zero field reads, method invocations, breakpoints, suspends, writes, retries, or game inputs. Ignored evidence is under `data/probe/V2.3X4D/`; V2.3X4-E was not started.
 
+## 2026-09-06 — V2.3X4-E authorized
+
+- The user explicitly authorized continuation into V2.3X4-E and then explicitly required Codex-only execution without DeepSeek Harness.
+- The new scope is metadata existence only for four exact names: `WSFramework.BaseData`, `WSFramework.SceneData`, `WSFramework.RootData`, and `UIBuildMenuViewCtrl`.
+- No instances, fields, properties, values, objects, threads, frames, locals, stacks, methods, breakpoints, suspension, writes, retries, telemetry, or game input are authorized.
+- The narrow client resolves the already-known `Unity.Model` and `Assembly-CSharp` assemblies, then uses only `AssemblyMirror.GetType(fullName, false, false)` to obtain four existence booleans. It deliberately excludes the broader VM-wide `GetTypes` API.
+- The endpoint and type-to-assembly mapping are compile-time fixed. Local verification is `126 passed`, Python compileall PASS, and diff check PASS; the client has not yet connected to the game.
+
 ## 2026-09-06 — V2.3X4-B Exact Unity Corlib Compatibility Test preparation
 
 - Preserved the original `Song_Data\\Managed` core files. Before the override, hashes were: `mscorlib.dll` `FC5B144B...4EA92CB`, `System.dll` `1252E720...78044E8`, `System.Core.dll` `A9A106E0...B77FC37`; `netstandard.dll` was absent.

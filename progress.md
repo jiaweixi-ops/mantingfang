@@ -369,6 +369,13 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - The client exited `0` and disconnected; `Song.exe` PID `30092` remained responsive and retained the sole `127.0.0.1:10000` listener, with zero established connections afterward.
 - Result: `MONO_DEBUGGER_ASSEMBLY_ENUM=PASS`. No field, type, object, thread, frame, local, stack, invocation, breakpoint, suspend, write, telemetry, or input operation occurred; V2.3X4-E remains untouched.
 
+## 2026-09-06 — V2.3X4-E started
+
+- The user authorized the minimal type-existence phase and explicitly disabled DeepSeek Harness for this task; implementation is Codex-only.
+- Planning scope is limited to four type-name booleans and one loopback connection with no retry. All runtime instance/state access and game input remain prohibited.
+- Added the pinned `net472` `MonoTypeExistenceProbe`, a dedicated CI artifact job, and contract tests that reject broad type enumeration plus all unauthorized runtime/state/control APIs.
+- Local verification passed with `126 passed`, Python compileall PASS, and diff check PASS. No V2.3X4-E debugger connection has occurred; execution awaits the exact CI artifact.
+
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 
 - Fixed `TryReadResource` to use the cached reader instance instead of calling instance reflection from a static method.

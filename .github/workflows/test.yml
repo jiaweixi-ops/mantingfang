@@ -51,6 +51,22 @@ jobs:
           path: runtime_probe/publish/assembly-enumerator/
           if-no-files-found: error
 
+  mono-type-existence-probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build minimal read-only Mono type-existence probe
+        run: dotnet publish runtime_probe/MonoTypeExistenceProbe.csproj --configuration Release --output runtime_probe/publish/type-existence-probe
+      - name: Publish Mono type-existence probe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MonoTypeExistenceProbe
+          path: runtime_probe/publish/type-existence-probe/
+          if-no-files-found: error
+
   pytest:
     runs-on: ubuntu-latest
     strategy:

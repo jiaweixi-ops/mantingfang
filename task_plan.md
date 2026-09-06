@@ -335,3 +335,14 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Execute at most one connection with a five-second outer timeout; save only assembly names and required-assembly booleans.
 - [x] Confirm disconnect, zero established connections, unchanged PID/listener ownership, and a responsive game.
 - [x] Record and push the result, then stop before V2.3X4-E.
+
+## V2.3X4-E Mono debugger minimal type-existence check
+
+- [x] Receive explicit authorization and preserve Codex-only implementation per the user's request.
+- [x] Re-confirm the responsive `Song.exe`, exact loopback listener ownership, and zero established debugger connections.
+- [x] Add a single-purpose client that checks only the existence of `WSFramework.BaseData`, `WSFramework.SceneData`, `WSFramework.RootData`, and `UIBuildMenuViewCtrl`.
+- [x] Add source-contract tests that prohibit instance enumeration, field/property/value reads, method invocation, threads/frames/locals/stacks, breakpoints, suspend/resume, mutation, reconnect loops, and configurable endpoints.
+- [ ] Build and publish the exact client in CI, then download and verify that artifact before execution.
+- [ ] Execute at most one connection with a five-second outer timeout and save only the four requested boolean results.
+- [ ] Confirm disconnect, zero established connections, unchanged PID/listener ownership, and a responsive game.
+- [ ] Record and push the result, then stop before any instance or field access phase.
