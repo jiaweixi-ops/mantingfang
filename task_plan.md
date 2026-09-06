@@ -292,3 +292,5 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [ ] Run the bridge read-only in the real game and verify `/health` and `/state`.
 - [ ] Compare a fresh runtime snapshot against a manually saved `RecordData` copy.
 - [ ] Keep `GOVERNOR_RUNTIME_TELEMETRY=false` until all three checks pass.
+- [x] Run read-only Doorstop diagnosis and record the concrete Preloader failure; no loader replacement or config edit is authorized by this phase.
+- [ ] Resolve BepInEx/Unity Mono Preloader compatibility, then re-check `BEPINEX_BOOT` before considering any build toolchain work.

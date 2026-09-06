@@ -170,6 +170,14 @@
 - After a user-visible restart, the process loaded the installed game-root `WINHTTP.dll`, but BepInEx produced no `LogOutput.log`, `config`, or `plugins` output and `Player.log` contained no BepInEx/Chainloader markers. `BEPINEX_BOOT` therefore remains `UNCONFIRMED/BLOCKED`; the Runtime Bridge was not installed.
 - Toolchain inspection confirms no .NET SDK, no `msbuild.exe`, and no .NET Framework 4.7.2 reference-assembly directory. Only .NET runtimes are installed. Do not change the bridge target framework or install the Bridge DLL until the loader boot and build toolchain are resolved.
 
+## 2026-09-06 — BepInEx Doorstop read-only diagnosis
+
+- Doorstop configuration is present and enabled. `target_assembly=BepInEx\\core\\BepInEx.Preloader.dll` resolves to an existing 43,008-byte assembly; the target and all 21 installed package files match the verified archive lengths.
+- `DOORSTOP_DISABLE`, `DOORSTOP_ENABLED`, `DOORSTOP_TARGET_ASSEMBLY`, and `DOORSTOP_IGNORE_DISABLED_ENV` are all not set. The running `Song.exe` PID 28076 loaded the game-root `WINHTTP.dll`, not only the system module.
+- A new `preloader_20260906_182826_640.log` proves Doorstop invoked BepInEx Preloader, but Preloader failed before normal BepInEx initialization with `System.MissingMethodException`: `System.Reflection.Module.GetPEKind(PortableExecutableKinds&, ImageFileMachine&)` is unavailable in this game's Unity Mono runtime.
+- Root cause is therefore a BepInEx 5.4.23.5 Preloader/Unity Mono compatibility failure, not a missing `winhttp.dll`, missing target assembly, or disabled Doorstop. `BepInEx/LogOutput.log`, `config/`, and `plugins/` were not generated.
+- The ignored evidence file is `data/probe/BEPINEX_BOOT_DIAGNOSTIC.json`. No verbose Doorstop replacement, configuration edit, SDK installation, Bridge build, plugin copy, telemetry enablement, or input occurred.
+
 - Use Python 3.11+ with a standard-library-first core to keep local/offline setup portable.
 - Use SQLite for durable local state and an append-only audit trail.
 - Use typed dataclasses and JSON validation at boundaries instead of passing arbitrary model output to an executor.

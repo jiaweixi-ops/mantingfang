@@ -306,6 +306,13 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - After the subsequent game restart, read-only module inspection confirmed the game loaded the root `WINHTTP.dll`, but no BepInEx `LogOutput.log`, `config`, or `plugins` artifacts appeared and no Chainloader markers were present in `Player.log`. BepInEx boot remains unconfirmed, so Bridge installation was not attempted.
 - Build-tool inspection found no .NET SDK, no `msbuild.exe`, and no .NET Framework 4.7.2 reference assemblies. X4 remains blocked before production Bridge build/load; no input, injection, save write, or telemetry enablement occurred.
 
+## 2026-09-06 — BepInEx Doorstop diagnosis
+
+- Completed the requested read-only Doorstop diagnosis and wrote ignored evidence to `data/probe/BEPINEX_BOOT_DIAGNOSTIC.json`.
+- Confirmed `doorstop_config.ini` is enabled, the target Preloader exists, all 21 installed package files match the verified archive lengths, Doorstop environment overrides are not set, and the game loaded the game-root `WINHTTP.dll`.
+- Found the first concrete failure in `preloader_20260906_182826_640.log`: BepInEx Preloader throws `System.MissingMethodException` for `System.Reflection.Module.GetPEKind(...)` under the game's Unity Mono runtime. `BEPINEX_BOOT=FAIL`; Bridge build/load and `/health`/`/state` remain blocked.
+- No configuration or game-file changes were made during diagnosis; no SDK was installed, no Bridge DLL was built/copied, and no Live/input/save/memory operation occurred.
+
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 
 - Fixed `TryReadResource` to use the cached reader instance instead of calling instance reflection from a static method.
