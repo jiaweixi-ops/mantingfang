@@ -457,3 +457,14 @@ Current execution note: CLOSED is PASS (3/3). ROOT_OPEN is PASS (3/3) through a 
 - [ ] Run full verification, commit, push, wait for CI, and stop before V2.4C.
 
 Result: `V2.4A/B-R=PASS_GEOMETRY_CALIBRATED`. CLOSED, ROOT_OPEN, and CATEGORY_OPEN each passed 3/3; CATEGORY_OPEN produced eight stable local slots, with fresh WGC/current HWND/PID/geometry on every sample and zero Qwen calls in R3.
+
+## V2.4E/F Controlled Live Select + Cancel Roundtrip
+
+- [x] Add a dedicated live roundtrip command with a hard limit of one BUILD_OPTION click and one BUILD_PLACEMENT_CANCEL click.
+- [x] Require an explicit proven slot identity from read-only calibration; manual click counts, legacy semantic labels, and old bboxes are never sufficient.
+- [x] Resolve the option from a fresh current-frame CATEGORY_OPEN snapshot, then resolve a fresh placement cancel target from the selected frame.
+- [x] Reuse the existing foreground, PID, geometry, cursor, SendInput return-count, and placement-cancel-only safety gates; always disarm in `finally`.
+- [x] Add fail-closed regression tests and CLI coverage; keep Qwen, telemetry, debugger, keyboard, map clicks, saves, and memory writes out of this phase.
+- [x] Execute the authorized live command with the existing E0 evidence; it persisted `FAIL_PRECONDITION_NO_PROVEN_SAFE_SLOT` with zero inputs because no explicit slot proof exists.
+- [ ] Obtain a new explicit safe-slot calibration identity before any future retry; do not infer it from the manual click count.
+- [ ] Run final delivery verification, commit, push, and CI confirmation.

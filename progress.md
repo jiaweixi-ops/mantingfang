@@ -483,3 +483,10 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - The user then manually cancelled. The post-cancel WGC frame remained `UNKNOWN` and still contained red candidates, so the workflow returned `FAIL_SAFE_PLACEMENT_UNKNOWN`; it sent no input and did not claim V2.4E0 PASS.
 - The implementation was tightened to record the manual selection count, distinguish a persistent selected cancel candidate from other red controls, and preserve fail-closed post-cancel handling. Full local verification remains `162 passed`, compileall PASS, diff check PASS.
 - A later fresh WGC diagnostic showed the city scene with the persistent bottom quick-build toolbar and no full Build Menu close control; this is not `CATEGORY_OPEN`, so the second attempt stopped before any manual selection. The diagnostic used `Song` title fallback and WGC remained healthy; no input or model call occurred.
+
+## 2026-09-06 — V2.4E/F controlled live roundtrip implementation
+
+- Implemented the Codex-only live select/cancel module and CLI command `e2e-build-placement-roundtrip --confirm-live-placement`.
+- Added explicit proven-slot loading and fresh-frame option planning. The existing V2.4E0 result has no proven slot identity, so the command must stop with `FAIL_PRECONDITION_NO_PROVEN_SAFE_SLOT` before any input rather than guess a card.
+- Added tests for rejecting manual click counts, legacy semantic samples, stale/non-current option evidence, and CLI confirmation.
+- Full local verification passed (`170 passed`, compileall, diff check). The authorized command stopped safely with `FAIL_PRECONDITION_NO_PROVEN_SAFE_SLOT`, zero clicks, zero input, zero Qwen calls, and disarmed state. Pending delivery commit/push and CI confirmation.

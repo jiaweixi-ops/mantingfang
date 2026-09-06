@@ -316,6 +316,14 @@
 - Read-only real-game result: `category_open -> building_selected -> category_open` after the user manually selected and manually cancelled one building option. Placement confidence was `0.9271`; current-frame cancel confidence was `0.98`.
 - WGC remained healthy with `near_black_frame=false`; HWND `396876`, PID `33016`, client `1280x960`, origin `[1,87]`, DPI `96` remained stable across baseline, selected, and post-cancel frames.
 - Safety counters were all zero for SendInput, automated mouse/keyboard, map clicks, Qwen, Runtime Telemetry, Mono Debugger, save writes, memory writes, and automated building placement. V2.4C was not entered.
+
+## 2026-09-06 — V2.4E/F live roundtrip safety boundary
+
+- The V2.4E0 evidence records `manual_build_option_clicks=1`, but it does not record the selected card's slot ID or ordinal. That is not enough to choose a live target.
+- Added `build_placement_live_e2e.py` with a hard fail-closed handoff: only `proven_safe_slot` with basis `explicit_current_frame_slot_identity` is accepted; legacy semantic labels, click counts, calibration bboxes, and stale screen points are rejected.
+- The live path is capped at one fresh BUILD_OPTION click followed by one fresh BUILD_PLACEMENT_CANCEL click. It uses the existing exact HWND/PID/foreground/geometry/cursor/SendInput guards and changes to `PLACEMENT_CANCEL_ONLY` before the cancel action.
+- The first authorized execution is expected to stop before capture/input with `FAIL_PRECONDITION_NO_PROVEN_SAFE_SLOT` because the current E0 evidence lacks explicit slot identity. No input will be sent; live is disarmed in the terminal path.
+- Actual execution result: `FAIL_PRECONDITION_NO_PROVEN_SAFE_SLOT`; `option_clicks=0`, `cancel_clicks=0`, `input_sent=false`, `qwen_calls=0`, and `arm_live=false`. No game window was captured or focused by this command.
 # V2.4C implementation notes (2026-09-06)
 
 - The live category action must resolve its category candidate from the same fresh WGC frame used for precondition validation. Earlier V2.4 calibration bboxes are non-actionable only.

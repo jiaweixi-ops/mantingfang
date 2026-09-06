@@ -389,6 +389,8 @@ def build_local_menu_snapshot(
     evidence = dict(snapshot.evidence)
     if phase == "root":
         evidence["category_source"] = "deterministic_current_frame_category_tab"
+    else:
+        evidence["option_source"] = "deterministic_current_frame_option_slot"
     return replace(snapshot, evidence=evidence)
 
 

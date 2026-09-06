@@ -31,6 +31,7 @@ from .e2e import (
 from .build_category_e2e import BuildCategoryE2EError, run_build_category_dry_run, run_live_build_category_once
 from .build_option_semantics_e2e import run_read_only_build_option_semantics
 from .build_placement_e2e import BuildPlacementCalibrationError, run_read_only_placement_calibration
+from .build_placement_live_e2e import BuildPlacementLiveError, run_live_build_placement_roundtrip
 from .build_menu_observer import BuildMenuCalibrationError, sample_build_menu_phase
 from .feishu import CommandRouter
 from .feishu_http import FeishuApiClient, FeishuCallbackServer, FeishuEventHandler
@@ -128,6 +129,12 @@ def build_parser() -> argparse.ArgumentParser:
     placement.add_argument("--output-dir", default="data/probe/V2.4E0")
     placement.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
     placement.add_argument("--settle-seconds", type=float, default=0.35)
+    placement_live = sub.add_parser("e2e-build-placement-roundtrip", help="run one guarded Live build-option select and placement-cancel roundtrip")
+    placement_live.add_argument("--confirm-live-placement", action="store_true", help="required confirmation before the two real clicks")
+    placement_live.add_argument("--output-dir", default="data/probe/V2.4EF")
+    placement_live.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
+    placement_live.add_argument("--evidence-path", default="data/probe/V2.4E0/result.json")
+    placement_live.add_argument("--settle-seconds", type=float, default=0.6)
     preflight = sub.add_parser("e2e-preflight", help="run read-only Steam capture and Vision preflight")
     preflight.add_argument("--wait-for-game-foreground", action="store_true", help="wait up to 30 seconds for Song to remain foreground for 3 seconds")
     preflight.add_argument("--timeout-seconds", type=float, default=30.0)
@@ -571,6 +578,24 @@ def main(argv: list[str] | None = None) -> int:
                     settle_seconds=args.settle_seconds,
                 )
             except (BuildPlacementCalibrationError, WindowError, CaptureError, OSError, ValueError) as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result.get("result") == "PASS" else 2
+        if args.command == "e2e-build-placement-roundtrip":
+            if not args.confirm_live_placement:
+                print("ERROR: V2.4E/F requires --confirm-live-placement", file=sys.stderr)
+                return 2
+            try:
+                result = run_live_build_placement_roundtrip(
+                    settings,
+                    store,
+                    output_dir=Path(args.output_dir),
+                    evidence_path=Path(args.evidence_path),
+                    window_title=args.title,
+                    settle_seconds=args.settle_seconds,
+                )
+            except (BuildPlacementLiveError, WindowError, CaptureError, OSError, ValueError) as exc:
                 print(f"ERROR: {exc}", file=sys.stderr)
                 return 2
             print(json.dumps(result, ensure_ascii=False, indent=2))
