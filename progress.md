@@ -361,6 +361,14 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Added a dedicated CI publish artifact plus source-contract tests that fail if prohibited debugger capabilities or retry loops enter the client.
 - Local verification: `123 passed`, Python compileall PASS, and diff check PASS. No debugger connection has occurred; execution is blocked until the pushed CI artifact is built, downloaded, and verified.
 
+## 2026-09-06 — V2.3X4-D minimal attachment passed
+
+- CI run `34030256428` passed all jobs and produced the exact pinned `MonoAssemblyEnumerator` artifact for commit `4e614adcbf4ddc06fd2cf9367b16d2876071264d`.
+- Verified the staged executable hash `BB310C44367D4BDAE4F08397D2C4C5C11461146D40E9AB997EC907700312B9C2` and `net472` managed metadata before running it.
+- Performed exactly one loopback debugger connection under a five-second outer timeout. It returned 106 assembly names and confirmed `Unity.Model`, `Assembly-CSharp`, and `UnityEngine.CoreModule`.
+- The client exited `0` and disconnected; `Song.exe` PID `30092` remained responsive and retained the sole `127.0.0.1:10000` listener, with zero established connections afterward.
+- Result: `MONO_DEBUGGER_ASSEMBLY_ENUM=PASS`. No field, type, object, thread, frame, local, stack, invocation, breakpoint, suspend, write, telemetry, or input operation occurred; V2.3X4-E remains untouched.
+
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 
 - Fixed `TryReadResource` to use the cached reader instance instead of calling instance reflection from a static method.

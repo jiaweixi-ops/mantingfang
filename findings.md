@@ -210,6 +210,15 @@
 - Added source-contract tests that reject suspend/resume, breakpoints, stepping, exception requests, type/thread/object/frame/value access, mutation APIs, and additional connection paths.
 - The exact client will be built and published by CI. It has not yet connected to the game. Local verification is `123 passed`, Python compileall PASS, and diff check PASS.
 
+## 2026-09-06 — V2.3X4-D assembly enumeration passed
+
+- GitHub Actions run `34030256428` built the exact source commit `4e614adcbf4ddc06fd2cf9367b16d2876071264d` and published the `MonoAssemblyEnumerator` artifact; all seven CI jobs passed.
+- The downloaded `MonoAssemblyEnumerator.exe` is 5,632 bytes with SHA-256 `BB310C44367D4BDAE4F08397D2C4C5C11461146D40E9AB997EC907700312B9C2`. Metadata-only inspection confirmed `.NET Framework 4.7.2`, pure managed IL, and direct assembly references limited to `Mono.Debugger.Soft`, `System`, and `mscorlib`.
+- Immediately before execution, responsive `Song.exe` PID `30092` owned the sole `127.0.0.1:10000` listener and there were zero established connections. The verified client was launched exactly once with a five-second outer timeout and exited normally with code `0`.
+- The permitted root-domain query returned 106 assembly names. `Unity.Model`, `Assembly-CSharp`, and `UnityEngine.CoreModule` were all present.
+- The client reported connected and disconnected successfully. After disconnect, the same game PID remained responsive, still owned the sole loopback listener, and established connections returned to zero. Stderr was empty.
+- Verdict: `MONO_DEBUGGER_ASSEMBLY_ENUM=PASS` with zero field reads, method invocations, breakpoints, suspends, writes, retries, or game inputs. Ignored evidence is under `data/probe/V2.3X4D/`; V2.3X4-E was not started.
+
 ## 2026-09-06 — V2.3X4-B Exact Unity Corlib Compatibility Test preparation
 
 - Preserved the original `Song_Data\\Managed` core files. Before the override, hashes were: `mscorlib.dll` `FC5B144B...4EA92CB`, `System.dll` `1252E720...78044E8`, `System.Core.dll` `A9A106E0...B77FC37`; `netstandard.dll` was absent.
