@@ -369,6 +369,6 @@ Result: `FAIL_TIMEOUT_AT_CONNECT`. No type query was reached and no retry is aut
 - [x] Add strict parsing for current-frame categories, building options, lock state, costs, and frame geometry.
 - [x] Add unit tests for state evidence, malformed/low-confidence observations, geometry preservation, and locked/cost-bearing options.
 - [x] Keep the new module disconnected from Qwen, live input, E2E executors, telemetry, and V2.5 placement.
-- [ ] Run pytest, compileall, diff check, commit, push, and verify `HEAD == origin/main`.
+- [x] Run pytest, compileall, diff check, commit, push, and verify `HEAD == origin/main`.
 
 Scope decision: V2.3X4 Mono Debugger is research-only after the safe connect timeout; do not retry it while implementing V2.4.

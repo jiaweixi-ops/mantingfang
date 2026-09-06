@@ -409,3 +409,4 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Added strict category and building-option parsing, including confidence, normalized bboxes, locked flags, non-negative costs, and optional frame geometry snapshots.
 - Added six focused tests (including malformed structures and a no-Qwen/no-input boundary check); full suite is `132 passed`.
 - `compileall` and `git diff --check` pass. No game process, debugger, capture, model API, telemetry, or input path was invoked.
+- GitHub Actions run `34031578192` completed successfully across Python 3.11/3.12, Windows 3.11/3.12, Bridge compile, and existing probe jobs. The implementation commit is `a7c72d8bbee3912c06ebf750cc4424b8289aa0d1`, and the follow-up record update is being pushed after this verification.
