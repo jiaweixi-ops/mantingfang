@@ -74,7 +74,7 @@ class BuildOption:
     label: str
     bbox: tuple[float, float, float, float]
     confidence: float
-    locked: bool = False
+    locked: bool | None = None
     costs: dict[str, int | float] = field(default_factory=dict)
     global_bbox: tuple[float, float, float, float] | None = None
 
@@ -298,9 +298,9 @@ def _parse_option(raw: Mapping[str, Any], index: int) -> BuildOption:
     local_bbox, global_bbox = _element_bbox(raw, field_name=f"option[{index}]")
     identifier = _text(raw.get("id", raw.get("canonical_id")), field_name=f"option[{index}].id")
     label = _text(raw.get("label"), field_name=f"option[{index}].label")
-    locked = raw.get("locked", raw.get("role") == "BUILD_DISABLED_OPTION")
-    if not isinstance(locked, bool):
-        raise BuildMenuSchemaError(f"option[{index}].locked must be bool")
+    locked = raw.get("locked")
+    if locked is not None and not isinstance(locked, bool):
+        raise BuildMenuSchemaError(f"option[{index}].locked must be bool or null")
     return BuildOption(
         identifier,
         label,

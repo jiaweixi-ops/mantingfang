@@ -113,6 +113,48 @@ class PerceptionEngine:
         """Analyze a calibration-only custom ROI without changing runtime catalog."""
         return self._observe_region_rgba(rgba, width, height, region, context=context)
 
+    def observe_build_categories_rgba(
+        self,
+        rgba: bytes,
+        width: int,
+        height: int,
+        *,
+        context: str = "",
+    ) -> Observation:
+        """Run the one-shot, category-only calibration schema for Build Menu.
+
+        Controls are deliberately excluded from this model request.  The
+        read-only adapter resolves them locally from the formal catalog ROI.
+        """
+        return self._observe_structured_rgba(
+            rgba,
+            width,
+            height,
+            self.regions.get("build_controls"),
+            key="categories",
+            role="BUILD_CATEGORY_TAB",
+            context=context,
+        )
+
+    def observe_build_options_rgba(
+        self,
+        rgba: bytes,
+        width: int,
+        height: int,
+        *,
+        context: str = "",
+    ) -> Observation:
+        """Run the one-shot, option-only calibration schema for Build Menu."""
+        return self._observe_structured_rgba(
+            rgba,
+            width,
+            height,
+            self.regions.get("build_controls"),
+            key="options",
+            role="BUILD_OPTION",
+            context=context,
+        )
+
     def _observe_region_rgba(
         self,
         rgba: bytes,
@@ -138,6 +180,78 @@ class PerceptionEngine:
             region,
             context=context,
             crop_box=(left, top, right, bottom),
+        )
+
+    def _observe_structured_rgba(
+        self,
+        rgba: bytes,
+        width: int,
+        height: int,
+        region: RegionSpec,
+        *,
+        key: str,
+        role: str,
+        context: str,
+    ) -> Observation:
+        left, top, right, bottom = region.crop_box(width, height)
+        cropped_width, cropped_height = right - left, bottom - top
+        expected = width * height * 4
+        if cropped_width <= 0 or cropped_height <= 0 or len(rgba) != expected:
+            raise ValueError(f"{key} calibration frame is invalid")
+        cropped = b"".join(
+            rgba[(row * width + left) * 4:(row * width + right) * 4]
+            for row in range(top, bottom)
+        )
+        prompt = (
+            f"任务上下文：{context or '读取当前建筑菜单结构'}\n"
+            f"只返回一个 JSON object，最外层必须是对象，不能是数组。只识别当前裁剪图中的{key}。"
+            f"返回严格格式：{{\"{key}\":[{{\"id\":\"...\",\"label\":\"...\","
+            "\"bbox\":[left,top,right,bottom],\"confidence\":0.0}}]}}。"
+            "bbox 必须是当前裁剪图内的 0 到 1 归一化坐标；不可确认的字段使用空字符串，"
+            "不要返回关闭按钮、切换按钮、其他控件或猜测坐标。"
+        )
+        result = self.analyzer.analyze_image_json(
+            encode_rgba_png(cropped_width, cropped_height, cropped),
+            prompt,
+            model=self.model,
+        )
+        if not isinstance(result, dict) or not isinstance(result.get(key), list):
+            raise ValueError("CALIBRATION_MODEL_SCHEMA_FAIL")
+        normalized: list[dict[str, Any]] = []
+        for index, item in enumerate(result[key]):
+            if not isinstance(item, dict):
+                raise ValueError("CALIBRATION_MODEL_SCHEMA_FAIL")
+            raw_bbox = item.get("bbox")
+            if not isinstance(raw_bbox, (list, tuple)) or len(raw_bbox) != 4:
+                raise ValueError("CALIBRATION_MODEL_SCHEMA_FAIL")
+            try:
+                bbox = [float(value) for value in raw_bbox]
+            except (TypeError, ValueError) as exc:
+                raise ValueError("CALIBRATION_MODEL_SCHEMA_FAIL") from exc
+            if not 0 <= bbox[0] < bbox[2] <= 1 or not 0 <= bbox[1] < bbox[3] <= 1:
+                raise ValueError("CALIBRATION_MODEL_SCHEMA_FAIL")
+            confidence = item.get("confidence")
+            if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not 0 <= float(confidence) <= 1:
+                raise ValueError("CALIBRATION_MODEL_SCHEMA_FAIL")
+            label = item.get("label")
+            if not isinstance(label, str) or not label.strip():
+                label = f"{key[:-1]}_{index + 1}"
+            identifier = item.get("id")
+            if not isinstance(identifier, str) or not identifier.strip():
+                identifier = f"{key[:-1]}_{index + 1}"
+            normalized.append({
+                **item,
+                "id": identifier.strip(),
+                "label": label.strip(),
+                "role": role,
+                "confidence": float(confidence),
+                "bbox": bbox,
+                "global_bbox": region.local_to_global_bbox(bbox),
+            })
+        return Observation(
+            data={key: normalized, "ui_elements": normalized},
+            source="qwen-vision-calibration",
+            region=region.name,
         )
 
     def _analyze(self, frame: bytes, region: RegionSpec, *, context: str, crop_box: tuple[int, int, int, int] | None) -> Observation:

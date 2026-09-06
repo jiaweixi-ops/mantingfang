@@ -379,7 +379,7 @@ Scope decision: V2.3X4 Mono Debugger is research-only after the safe connect tim
 - [x] Keep Vision calls bounded to one calibration call per phase; use local frame/template stability checks for later samples.
 - [x] Add closed, root-open, and category-open three-sample workflows with current-frame geometry and IoU validation.
 - [x] Persist bounded JSON evidence under `data/probe/V2.4ABR/`; never commit large screenshots or secrets.
-- [ ] Run the real read-only calibration only after code verification and required manual UI state changes; do not enter V2.4C.
-- [ ] Run pytest, compileall, diff check, commit, push, and CI verification.
+- [ ] Run the real read-only calibration only after code verification and required manual UI state changes; do not enter V2.4C. CLOSED and ROOT_OPEN have passed; CATEGORY_OPEN stopped safely on the one permitted Flash schema failure and remains pending a separately authorized calibration approach.
+- [ ] Run pytest, compileall, diff check, commit, push, and CI verification for the deterministic control/category-fusion implementation.
 
-Current execution note: CLOSED is PASS; ROOT_OPEN is pending because the real Vision response has not yet yielded an accepted close-control element across three stable fresh frames. Category phase has not started.
+Current execution note: CLOSED is PASS (3/3). ROOT_OPEN is PASS (3/3) through a current-frame deterministic red close-control resolver at confidence 0.9807 plus eight geometry-calibrated categories reused only as non-actionable seeds. CATEGORY_OPEN made its one permitted `qwen3.8-flash` request and received an invalid response shape (`CALIBRATION_MODEL_SCHEMA_FAIL`); it was not retried. No `qwen3.8-max`, input, map click, save write, or memory write occurred during R2.

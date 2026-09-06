@@ -288,3 +288,10 @@
 - The first ROOT_OPEN Vision response produced eight high-confidence category candidates but no `BUILD_MENU_CLOSE`/`BUILD_MENU_TOGGLE` element, so the pure state detector correctly returned `UNKNOWN` and rejected the phase.
 - The adapter prompt was tightened to require visible close-control reporting and to keep category tabs distinct from build options. A subsequent flash response was a top-level JSON array and was rejected by the existing fail-closed schema guard; the exceptional max-model attempt timed out. No live input or game mutation occurred.
 - Do not mark ROOT_OPEN or the complete V2.4A/B-R acceptance as passed until a fresh 3/3 run contains an accepted close-control geometry and stable `ROOT_OPEN` state.
+
+## 2026-09-06 — V2.4A/B-R2 deterministic control/category fusion
+
+- Control-state evidence and content-structure evidence are now deliberately separate: a fresh WGC frame resolves the red upper-right `BUILD_MENU_CLOSE` control locally in the existing `build_entry` RegionCatalog region, while Qwen is limited to category/option structure.
+- ROOT_OPEN passed 3/3 with the current-frame local close-control bbox `[0.96640625, 0.1135416667, 0.99921875, 0.1583333333]`, confidence `0.980664...`, stable Song HWND/PID/geometry, healthy WGC, and eight previously calibrated categories used only as non-actionable seed data before local tracking. No Qwen request was made for this R2 root run.
+- After the user manually entered a category, the single permitted `qwen3.8-flash` option-structure request returned an invalid shape and was rejected by the dedicated strict category schema as `CALIBRATION_MODEL_SCHEMA_FAIL`. It was not retried, no Max model was called, and no game input or mutation occurred.
+- The generic parser remains strict; category calibration has its own `{ "categories": [...] }` / `{ "options": [...] }` boundary and does not relax the generic Vision contract to accept top-level arrays.

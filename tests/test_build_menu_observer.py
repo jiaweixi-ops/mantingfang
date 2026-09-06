@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from ai_governor.build_menu import BuildCategory, BuildMenuSnapshot, BuildMenuState, BuildOption, FrameGeometry
-from ai_governor.build_menu_observer import _track_bbox, assess_phase_snapshots
+from ai_governor.build_menu_observer import _resolve_local_menu_control, _track_bbox, assess_phase_snapshots
+from ai_governor.perception import RegionCatalog
 
 
 def _geometry() -> FrameGeometry:
@@ -88,3 +89,17 @@ def test_template_tracker_returns_a_bbox_from_the_fresh_frame() -> None:
     assert bbox == [18 / 64, 17 / 64, 26 / 64, 25 / 64]
     assert confidence >= 0.99
 
+
+def test_local_control_resolver_uses_current_red_close_patch() -> None:
+    width = height = 64
+    frame = bytearray([30, 30, 30, 255] * (width * height))
+    for y in range(6, 14):
+        for x in range(54, 64):
+            offset = (y * width + x) * 4
+            frame[offset:offset + 4] = bytes((210, 60, 45, 255))
+    control = _resolve_local_menu_control(bytes(frame), width, height, RegionCatalog())
+    assert control is not None
+    assert control["role"] == "BUILD_MENU_CLOSE"
+    assert control["region"] == "build_entry"
+    assert control["confidence"] >= 0.90
+    assert control["global_bbox"] == [56 / 64, 6 / 64, 64 / 64, 14 / 64]

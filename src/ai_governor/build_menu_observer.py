@@ -46,24 +46,14 @@ _PHASE_CONFIG = {
         "output_key": "root_open",
         "region": "build_controls",
         "expected_state": BuildMenuState.ROOT_OPEN,
-        "context": (
-            "用户已经手动打开建筑菜单。只识别关闭控件和真实 BUILD_CATEGORY_TAB 分类，不执行任何操作。"
-            "必须逐项检查当前裁剪图中的关闭控件：若可见，ui_elements 必须包含 role=BUILD_MENU_CLOSE"
-            "（若游戏只呈现同一个切换控件则使用 role=BUILD_MENU_TOGGLE），并给出其当前帧 bbox。"
-            "分类标签必须使用 role=BUILD_CATEGORY_TAB；不要把分类标签标成 BUILD_OPTION。"
-        ),
+        "context": "用户已经手动打开建筑菜单。只识别真实 BUILD_CATEGORY_TAB 分类，不执行任何操作。",
         "required_roles": {"BUILD_MENU_CLOSE", "BUILD_MENU_TOGGLE", "BUILD_CATEGORY_TAB"},
     },
     "category": {
         "output_key": "category_open",
         "region": "build_controls",
         "expected_state": BuildMenuState.CATEGORY_OPEN,
-        "context": (
-            "用户已经手动进入一个普通建筑分类。只识别关闭控件和真实 BUILD_OPTION/BUILD_DISABLED_OPTION"
-            "建筑卡片，不执行任何操作。必须逐项检查当前裁剪图中的关闭控件：若可见，ui_elements 必须包含"
-            "role=BUILD_MENU_CLOSE（若游戏只呈现同一个切换控件则使用 role=BUILD_MENU_TOGGLE），并给出其当前帧 bbox。"
-            "未知 label/locked/costs 必须留空或 UNKNOWN，不要猜测。"
-        ),
+        "context": "用户已经手动进入一个普通建筑分类。只识别真实 BUILD_OPTION/BUILD_DISABLED_OPTION 建筑卡片，不执行任何操作。未知 label/locked/costs 必须留空或 UNKNOWN，不要猜测。",
         "required_roles": {"BUILD_MENU_CLOSE", "BUILD_MENU_TOGGLE", "BUILD_OPTION", "BUILD_DISABLED_OPTION"},
     },
 }
@@ -150,6 +140,165 @@ def _track_bbox(
         best_box[2] / width,
         best_box[3] / height,
     ], max(0.0, 1.0 - best_error)
+
+
+def _resolve_local_menu_control(
+    rgba: bytes,
+    width: int,
+    height: int,
+    catalog: RegionCatalog,
+) -> dict[str, Any] | None:
+    """Resolve the visible red close/toggle control from the current frame.
+
+    Song's open-menu close control is in the existing ``build_entry`` formal
+    ROI, not in the lower ``build_controls`` crop.  This resolver uses only
+    current-frame pixels and that catalog boundary; it never consumes or
+    returns a calibration bbox as an actionable target.
+    """
+    region = catalog.get("build_entry")
+    left, top, right, bottom = region.crop_box(width, height)
+    search_left = max(left, int(width * 0.88))
+    search_top = max(top, int(height * 0.08))
+    search_bottom = min(bottom, int(height * 0.25))
+    if search_left >= right or search_top >= search_bottom:
+        return None
+    visited: set[tuple[int, int]] = set()
+    components: list[tuple[int, int, int, int, int]] = []
+
+    def is_red(x: int, y: int) -> bool:
+        offset = (y * width + x) * 4
+        red, green, blue = rgba[offset:offset + 3]
+        return red >= 140 and red > green * 1.45 and red > blue * 1.35 and green <= 150
+
+    for y in range(search_top, search_bottom):
+        for x in range(search_left, right):
+            if (x, y) in visited or not is_red(x, y):
+                continue
+            stack = [(x, y)]
+            visited.add((x, y))
+            pixels: list[tuple[int, int]] = []
+            while stack:
+                current_x, current_y = stack.pop()
+                pixels.append((current_x, current_y))
+                for next_x, next_y in (
+                    (current_x - 1, current_y),
+                    (current_x + 1, current_y),
+                    (current_x, current_y - 1),
+                    (current_x, current_y + 1),
+                ):
+                    if (
+                        search_left <= next_x < right
+                        and search_top <= next_y < search_bottom
+                        and (next_x, next_y) not in visited
+                        and is_red(next_x, next_y)
+                    ):
+                        visited.add((next_x, next_y))
+                        stack.append((next_x, next_y))
+            if len(pixels) >= 40:
+                xs = [item[0] for item in pixels]
+                ys = [item[1] for item in pixels]
+                components.append((len(pixels), min(xs), min(ys), max(xs) + 1, max(ys) + 1))
+    if not components:
+        return None
+    area, box_left, box_top, box_right, box_bottom = max(components)
+    box_width = box_right - box_left
+    box_height = box_bottom - box_top
+    if box_width < 8 or box_height < 8:
+        return None
+    fill = area / float(box_width * box_height)
+    squareness = 1.0 - min(1.0, abs(box_width - box_height) / max(box_width, box_height))
+    confidence = min(0.99, max(0.90, 0.90 + 0.04 * min(1.0, fill) + 0.05 * squareness))
+    bbox = [box_left / width, box_top / height, box_right / width, box_bottom / height]
+    return {
+        "id": "build_menu_close_control",
+        "canonical_id": "build_menu_close_control",
+        "raw_id": "local_red_close_control",
+        "role": "BUILD_MENU_CLOSE",
+        "label": "关闭",
+        "bbox": bbox,
+        "global_bbox": bbox,
+        "confidence": confidence,
+        "region": "build_entry",
+        "resolver": "deterministic_current_frame_red_control",
+    }
+
+
+def _geometry_key(geometry: FrameGeometry) -> tuple[Any, ...]:
+    return (
+        geometry.hwnd,
+        geometry.pid,
+        geometry.client_width,
+        geometry.client_height,
+        geometry.client_origin,
+        geometry.dpi,
+    )
+
+
+def _reusable_root_categories(output_dir: Path, geometry: FrameGeometry) -> dict[str, Any] | None:
+    """Load prior categories only as a non-actionable seed when identity matches."""
+    path = output_dir / "root_open" / "result.json"
+    try:
+        previous = json.loads(path.read_text(encoding="utf-8"))
+        sample = previous["samples"][0]
+        previous_geometry = sample["geometry"]
+        previous_key = (
+            int(previous_geometry["hwnd"]),
+            int(previous_geometry["pid"]),
+            int(previous_geometry["client_width"]),
+            int(previous_geometry["client_height"]),
+            tuple(int(value) for value in previous_geometry["client_origin"]),
+            int(previous_geometry["dpi"]),
+        )
+        if previous_key != _geometry_key(geometry):
+            return None
+        categories = sample["snapshot"]["categories"]
+        if not isinstance(categories, list) or not categories:
+            return None
+        elements: list[dict[str, Any]] = []
+        for item in categories:
+            if not isinstance(item, dict):
+                return None
+            bbox = item.get("global_bbox")
+            if not isinstance(bbox, list) or len(bbox) != 4:
+                return None
+            elements.append({
+                "id": item.get("id"),
+                "canonical_id": item.get("id"),
+                "raw_id": item.get("id"),
+                "role": "BUILD_CATEGORY_TAB",
+                "label": item.get("label") or "category",
+                "bbox": list(bbox),
+                "global_bbox": list(bbox),
+                "confidence": float(item.get("confidence", 0.0)),
+            })
+        return {"categories": elements, "ui_elements": elements}
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def _compose_phase_observation(
+    phase: str,
+    base: Mapping[str, Any],
+    local_control: dict[str, Any] | None,
+) -> dict[str, Any]:
+    elements = [dict(item) for item in base.get("ui_elements", []) if isinstance(item, Mapping)]
+    if local_control is not None:
+        elements.append(dict(local_control))
+    observation: dict[str, Any] = {
+        **dict(base),
+        "build_menu_open": True,
+        "current_screen": "建筑菜单",
+        "ui_elements": elements,
+    }
+    if phase == "root":
+        categories = [item for item in elements if item.get("role") == "BUILD_CATEGORY_TAB"]
+        observation["categories"] = categories
+        observation.pop("building_options", None)
+    elif phase == "category":
+        options = [item for item in elements if item.get("role") in {"BUILD_OPTION", "BUILD_DISABLED_OPTION"}]
+        observation["building_options"] = options
+        observation.pop("categories", None)
+    return observation
 
 
 def _geometry(capture: ClientAreaCapture, backend: Win32WindowBackend) -> FrameGeometry:
@@ -322,8 +471,6 @@ def sample_build_menu_phase(
         raise BuildMenuCalibrationError("V2.4A/B-R requires exactly three samples")
     if interval_seconds < 0:
         raise BuildMenuCalibrationError("interval_seconds must be non-negative")
-    if not settings.qwen_api_key:
-        raise QwenConfigurationError("QWEN_API_KEY is not configured")
     backend = Win32WindowBackend()
     title = window_title or settings.game_window_title
     window = SteamWindowAdapter(title, backend)
@@ -335,13 +482,25 @@ def sample_build_menu_phase(
         window = SteamWindowAdapter("Song", backend)
         window.locate()
     capture = ClientAreaCapture(window, WindowsGraphicsCaptureBackend(), reject_near_black=True)
-    client = QwenClient(
-        settings.qwen_api_base,
-        settings.qwen_api_key,
-        vision_model,
-        usage_callback=store.record_token_usage,
-    )
-    perception = PerceptionEngine(client, RegionCatalog(), model=vision_model)
+    catalog = RegionCatalog()
+    client: QwenClient | None = None
+    perception: PerceptionEngine | None = None
+
+    def ensure_perception() -> PerceptionEngine:
+        nonlocal client, perception
+        if perception is not None:
+            return perception
+        if not settings.qwen_api_key:
+            raise QwenConfigurationError("QWEN_API_KEY is not configured")
+        client = QwenClient(
+            settings.qwen_api_base,
+            settings.qwen_api_key,
+            vision_model,
+            usage_callback=store.record_token_usage,
+        )
+        perception = PerceptionEngine(client, catalog, model=vision_model)
+        return perception
+
     region_name = _PHASE_CONFIG[phase]["region"]
     snapshots: list[BuildMenuSnapshot] = []
     sample_reports: list[dict[str, Any]] = []
@@ -353,17 +512,48 @@ def sample_build_menu_phase(
         geometry = _geometry(capture, backend)
         frame_id = str(uuid4())
         if index == 0:
-            observation = perception.observe_rgba(
-                frame.rgba,
-                frame.width,
-                frame.height,
-                region_name,
-                context=str(_PHASE_CONFIG[phase]["context"]),
-            ).data
-            reference_observation = dict(observation)
+            if phase == "root":
+                seed = _reusable_root_categories(output_dir, geometry)
+                if seed is not None:
+                    reference_observation = seed
+                    observation, tracking = _tracked_observation(
+                        seed,
+                        frame.rgba,
+                        frame.rgba,
+                        frame.width,
+                        frame.height,
+                    )
+                else:
+                    observation = ensure_perception().observe_build_categories_rgba(
+                        frame.rgba,
+                        frame.width,
+                        frame.height,
+                        context=str(_PHASE_CONFIG[phase]["context"]),
+                    ).data
+                    reference_observation = dict(observation)
+                    tracking = []
+                    qwen_calls += 1
+            elif phase == "category":
+                observation = ensure_perception().observe_build_options_rgba(
+                    frame.rgba,
+                    frame.width,
+                    frame.height,
+                    context=str(_PHASE_CONFIG[phase]["context"]),
+                ).data
+                reference_observation = dict(observation)
+                tracking = []
+                qwen_calls += 1
+            else:
+                observation = ensure_perception().observe_rgba(
+                    frame.rgba,
+                    frame.width,
+                    frame.height,
+                    region_name,
+                    context=str(_PHASE_CONFIG[phase]["context"]),
+                ).data
+                reference_observation = dict(observation)
+                tracking = []
             reference_rgba = frame.rgba
-            qwen_calls += 1
-            tracking: list[dict[str, Any]] = []
         else:
             if reference_observation is None or reference_rgba is None:
                 raise BuildMenuCalibrationError("missing first-frame calibration reference")
@@ -373,6 +563,12 @@ def sample_build_menu_phase(
                 frame.rgba,
                 frame.width,
                 frame.height,
+            )
+        if phase in {"root", "category"}:
+            observation = _compose_phase_observation(
+                phase,
+                observation,
+                _resolve_local_menu_control(frame.rgba, frame.width, frame.height, catalog),
             )
         snapshot = parse_build_menu_snapshot(observation, geometry=geometry)
         snapshots.append(snapshot)
@@ -393,6 +589,7 @@ def sample_build_menu_phase(
         "phase": "V2.4A/B-R",
         "phase_name": _PHASE_CONFIG[phase]["output_key"],
         "region": region_name,
+        "control_resolver": "deterministic_current_frame_red_control" if phase in {"root", "category"} else "vision",
         "vision_model": vision_model,
         "qwen_calls": qwen_calls,
         "sendinput_calls": 0,
