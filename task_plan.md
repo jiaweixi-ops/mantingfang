@@ -228,3 +228,14 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Persist before/annotated/200/500/1000/2000ms evidence and disarm automatically.
 - [x] Run pytest, compileall, and diff check before the authorized real attempt.
 - [ ] Execute the authorized close-only attempt; do not start V2.3E in the same turn.
+
+## V2.3X Direct Game State Probe (2026-09-06)
+
+- [x] Locate the installed Song executable, Mono managed directory, and core assemblies.
+- [x] Confirm `Unity.Model.dll` contains the `WSFramework` gameplay/state model; `Assembly-CSharp.dll` is not the primary state assembly.
+- [x] Identify the local common save as an Odin binary containing `WSFramework.CommonData`; preserve original files.
+- [x] Enumerate the Odin `SerializationUtility` read-only deserialization API.
+- [x] Inspect `RecordData` and save-file routing for the active city record.
+- [x] Parse the available common save bytes read-only and extract safe state candidates.
+- [x] Document the concrete blocker: no active-city `RecordData` file is currently present, so no repository probe was added yet.
+- [x] Run focused tests, compileall, and diff check; no Live E2E, memory writes, or game input.

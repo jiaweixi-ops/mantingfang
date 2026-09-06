@@ -135,6 +135,19 @@
 - A subsequent attempt captured the same visible open panel, while `build_controls` alone returned an inconsistent `build_menu_open=false`; it stopped before input. The fallback condition now also handles this old-ROI state mismatch and rechecks the richer formal `build_entry` ROI before any click.
 - Final bounded V2.3D attempt still failed closed on the `build_menu_open=true` precondition after the fallback recheck. No click was sent in any close-only attempt (`total_inputs=0` each time); the visible panel/capture is available, but Vision state is not stable enough to authorize input.
 
+## 2026-09-06 — V2.3X Direct Game State Probe
+
+- Installed game: `F:\SteamLibrary\steamapps\common\Thriving City Song`; Mono managed directory and `Song.exe` are present.
+- `Unity.Model.dll` is the core gameplay assembly (2,504 reflected types, including `WSFramework` state/model classes); `Assembly-CSharp.dll` contains mostly UI/mod glue for this purpose.
+- `WSFramework.BaseData` exposes direct state candidates such as `Gold`, `ShowRes`, `Year`, `Month`, `CityName`, population collections, and `SceneData`; `SceneData` exposes `Buildings` and `Sites`; `BuildingData` exposes building identity/state fields.
+- `WSFramework.UIBuildMenuViewCtrl` exposes build-menu control methods, but this is runtime UI state and should not be confused with serialized city state.
+- `C:\Users\奚嘉威\AppData\LocalLow\WhiteStar\Song\common.record` and `common.tmp` are identical 17,580-byte files. Their metadata strings identify Odin serialization and `WSFramework.CommonData`; originals were not changed.
+- `Player.log` confirms Odin Serializer initialization and common-data loading. Next probe is limited to enumerating deserialization APIs and reading copied/in-memory bytes; no save/write APIs or game injection are allowed.
+- The file header is standard .NET `BinaryFormatter` (`00 01 00 00 00 FF FF FF FF 01 00 00 00 00 00 00`), not a standalone Odin Binary stream. A .NET Framework read-only parser recovered both files as `WSFramework.CommonData`; no game methods were invoked.
+- Safe extracted common-data facts: `MapState.count=9`, `SelectSkin.count=100`, and `ComboList` is a typed `HashSet<int>`. Both files remain byte-identical at SHA-256 `EA304374E637DB539D71CEA89BE71C58276905260E9BA707181621FE558E0521` and 17,580 bytes.
+- `DataComponent` exposes `LoadRecord(string/int64)`, `LoadShareRecord`, `SaveRecordIndex`, `OverwriteRecord`, and `RecordPath`; reflection shows `RecordData` metadata and `BaseData`/`SceneData` candidates, but invoking load/save/runtime component code is out of scope for this read-only probe.
+- The local save tree contains only `common.record` and `common.tmp` plus settings/logs; `Version2` is empty and no active-city `RecordData` file is present. A real-time bridge therefore remains blocked until the user creates or exposes a city record, or a separately authorized read-only runtime state source is selected.
+
 - Use Python 3.11+ with a standard-library-first core to keep local/offline setup portable.
 - Use SQLite for durable local state and an append-only audit trail.
 - Use typed dataclasses and JSON validation at boundaries instead of passing arbitrary model output to an executor.

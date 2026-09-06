@@ -217,3 +217,20 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 
 - The final close-only execution stopped before input because the current-frame Vision precondition did not stably confirm `build_menu_open=true`, despite a valid Song capture. `total_inputs=0`, `unexpected_inputs=0`, and `arm_live=false`.
 - V2.3D is not marked PASS. The implementation and tests are ready, but a future attempt needs a stable open-state Vision result; V2.3E remains blocked and was not executed.
+
+## 2026-09-06 — V2.3X probe started
+
+- Resumed the latest requested direction: inspect the game model and save format instead of continuing unstable build-menu Vision verification.
+- Confirmed the repository is on `main`, clean, and aligned with `origin/main` before probe work.
+- Confirmed `Unity.Model.dll`, `Assembly-CSharp.dll`, and `Sirenix.Serialization.dll` in the installed Mono managed directory.
+- Confirmed `common.record`/`common.tmp` are identical Odin-serialized common data files and retained both originals unchanged.
+- No Live E2E, no `arm-live`, no mouse/keyboard input, no process-memory write, and no repository code changes have been made in this phase.
+- Next command: enumerate Odin read-only deserialization entry points and inspect `RecordData`/save routing.
+
+## 2026-09-06 — V2.3X probe result
+
+- Enumerated `Sirenix.Serialization.SerializationUtility`; it supports weak and typed read-only deserialization, but the available common files use the .NET BinaryFormatter envelope.
+- Used an isolated .NET Framework parser with a local assembly allow-list to deserialize only the existing `common.record`/`common.tmp` files. Both yielded `WSFramework.CommonData`; no writes, save calls, or game process injection occurred.
+- Inspected `WSFramework.RecordData`, `BaseData`, `SceneData`, `BuildingData`, `DataComponent`, and the `RecordPath`/load/save API surface. No active-city record file exists under the current Song save tree, so the live city-state bridge cannot yet be validated from disk.
+- Installed only missing test-environment packages in `.venv` (`pytest`, `tzdata`); no project dependency declaration was changed.
+- Verification: `101 passed`; `python -m compileall -q src` PASS; `git diff --check` PASS. No Live E2E, no `arm-live`, no mouse/keyboard input, and no memory writes.
