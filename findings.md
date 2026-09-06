@@ -167,6 +167,8 @@
 - The user later started the game; a read-only check found `Song.exe` responding at PID `23392`, HWND `30738232`, with the same Unity `2022.3.62f2` build. BepInEx/Doorstop markers remain absent and loopback port `18765` has no listener, so the Bridge is not loaded.
 - After explicit user confirmation, installed only the verified official `BepInEx_win_x64_5.4.23.5.zip` into the exact game root. The archive SHA-256 matched `82f9878551030f54657792c0740d9d51a09500eeae1fba21106b0c441e6732c4`; the package's `.doorstop_version` is `4.5.0`. No existing loader conflict was present, and the project Bridge was not installed.
 - The game process was not restarted after installation. A production Bridge build attempt is currently blocked because this machine has no .NET SDK (`dotnet build` reports SDK not found); only .NET runtimes are installed. No game files were overwritten, no save was changed, and no input or injection occurred.
+- After a user-visible restart, the process loaded the installed game-root `WINHTTP.dll`, but BepInEx produced no `LogOutput.log`, `config`, or `plugins` output and `Player.log` contained no BepInEx/Chainloader markers. `BEPINEX_BOOT` therefore remains `UNCONFIRMED/BLOCKED`; the Runtime Bridge was not installed.
+- Toolchain inspection confirms no .NET SDK, no `msbuild.exe`, and no .NET Framework 4.7.2 reference-assembly directory. Only .NET runtimes are installed. Do not change the bridge target framework or install the Bridge DLL until the loader boot and build toolchain are resolved.
 
 - Use Python 3.11+ with a standard-library-first core to keep local/offline setup portable.
 - Use SQLite for durable local state and an append-only audit trail.

@@ -303,6 +303,8 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - X4 is blocked at the deliberate loader/build prerequisite. The next step requires a version-compatible loader decision and a running game; keep `GOVERNOR_RUNTIME_TELEMETRY=false`.
 - After the user started the game, read-only verification found responsive `Song.exe` PID `23392`, HWND `30738232`, and no listener on `127.0.0.1:18765`. BepInEx/Doorstop is still absent; no focus change, injection, input, or game-file modification was performed.
 - After explicit confirmation, installed the verified official x64 BepInEx `5.4.23.5` package into the game root. SHA-256 matched the supplied value and the bundled Doorstop version is `4.5.0`; no separate Doorstop or project Bridge was installed. The game was not restarted, and the real Bridge build is blocked locally because no .NET SDK is installed.
+- After the subsequent game restart, read-only module inspection confirmed the game loaded the root `WINHTTP.dll`, but no BepInEx `LogOutput.log`, `config`, or `plugins` artifacts appeared and no Chainloader markers were present in `Player.log`. BepInEx boot remains unconfirmed, so Bridge installation was not attempted.
+- Build-tool inspection found no .NET SDK, no `msbuild.exe`, and no .NET Framework 4.7.2 reference assemblies. X4 remains blocked before production Bridge build/load; no input, injection, save write, or telemetry enablement occurred.
 
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 
