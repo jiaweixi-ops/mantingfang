@@ -16,6 +16,9 @@ def test_probe_is_fixed_to_four_exact_type_existence_queries() -> None:
     assert source.count("assembly.GetType(fullName, false, false)") == 1
     assert source.count("TypeExists(") == 5  # definition plus four fixed calls
     assert source.count("machine.Disconnect()") == 1
+    assert source.count("Console.Out.Flush()") == 1
+    assert 'Marker("CONNECT_BEGIN")' in source
+    assert 'Marker("DISCONNECT_BEGIN")' in source
     assert "IPAddress.Loopback" in source
     assert "DebugPort = 10000" in source
 

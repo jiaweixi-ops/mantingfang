@@ -379,6 +379,11 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Executed exactly one connection attempt with a five-second outer timeout. It timed out with empty output, was terminated, and was not retried, so the four type-existence booleans remain unknown.
 - Post-failure checks passed: the same Song PID remained responsive and owned the loopback listener, with zero established connections. Result is `FAIL_TIMEOUT_SAFE`; no later debugger phase was started.
 
+## 2026-09-06 — V2.3X4-E2 started
+
+- The user requested continuation after the safe E timeout. The diagnostic mutation is limited to flushed phase markers around connect, assembly location, each of the four exact type queries, and disconnect.
+- The same type-only operation contract remains in force; no additional debugger capability or retry is being added. The next execution will again be one connection with an outer timeout.
+
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 
 - Fixed `TryReadResource` to use the cached reader instance instead of calling instance reflection from a static method.

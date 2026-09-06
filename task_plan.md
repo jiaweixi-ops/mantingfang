@@ -353,3 +353,10 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 |---|---:|---|
 | PowerShell on the installed .NET runtime does not support `ReflectionOnlyLoadFrom` | 1 | Did not retry; use `dnfile` plus raw CLR metadata string inspection for the CI artifact. |
 | The single authorized type-existence probe exceeded the five-second outer timeout and emitted no stdout/stderr | 1 | Terminated only the probe process, verified zero debugger connections and a responsive game, prohibited retry, and recorded `FAIL_TIMEOUT_SAFE`. |
+| The E2 diagnostic contract test looked for the runtime-composed marker string instead of the fixed marker call | 1 | Corrected the test to assert the source-level `Marker("CONNECT_BEGIN")` and `Marker("DISCONNECT_BEGIN")` calls; no debugger connection occurred. |
+
+## V2.3X4-E2 flushed phase diagnostics
+
+- [x] Add only flushed markers around connect, assembly lookup, each exact type query, and disconnect.
+- [ ] Run the CI-built diagnostic artifact once with the same read-only constraints.
+- [ ] Record the stopping phase and post-run safety state, then push and stop.

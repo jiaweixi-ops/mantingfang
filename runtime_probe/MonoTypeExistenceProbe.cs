@@ -21,9 +21,11 @@ internal static class Program
 
         try
         {
+            Marker("CONNECT_BEGIN");
             machine = VirtualMachineManager.Connect(
                 new IPEndPoint(IPAddress.Loopback, DebugPort));
             connected = true;
+            Marker("CONNECT_END");
 
             foreach (var assembly in machine.RootDomain.GetAssemblies())
             {
@@ -38,10 +40,19 @@ internal static class Program
                 }
             }
 
+            Marker("ASSEMBLIES_LOCATED\t" + (unityModel != null) + "\t" + (assemblyCSharp != null));
+            Marker("TYPE_BEGIN\tWSFramework.BaseData");
             baseDataExists = TypeExists(unityModel, "WSFramework.BaseData");
+            Marker("TYPE_END\tWSFramework.BaseData\t" + baseDataExists);
+            Marker("TYPE_BEGIN\tWSFramework.SceneData");
             sceneDataExists = TypeExists(unityModel, "WSFramework.SceneData");
+            Marker("TYPE_END\tWSFramework.SceneData\t" + sceneDataExists);
+            Marker("TYPE_BEGIN\tWSFramework.RootData");
             rootDataExists = TypeExists(unityModel, "WSFramework.RootData");
+            Marker("TYPE_END\tWSFramework.RootData\t" + rootDataExists);
+            Marker("TYPE_BEGIN\tUIBuildMenuViewCtrl");
             buildMenuViewExists = TypeExists(assemblyCSharp, "UIBuildMenuViewCtrl");
+            Marker("TYPE_END\tUIBuildMenuViewCtrl\t" + buildMenuViewExists);
         }
         catch (Exception error)
         {
@@ -53,8 +64,10 @@ internal static class Program
             {
                 try
                 {
+                    Marker("DISCONNECT_BEGIN");
                     machine.Disconnect();
                     disconnected = true;
+                    Marker("DISCONNECT_END");
                 }
                 catch (Exception error)
                 {
@@ -90,6 +103,12 @@ internal static class Program
         }
 
         return connected && disconnected && errorType == null ? 0 : 2;
+    }
+
+    private static void Marker(string phase)
+    {
+        Console.WriteLine("PHASE\t" + phase);
+        Console.Out.Flush();
     }
 
     private static bool TypeExists(AssemblyMirror assembly, string fullName)
