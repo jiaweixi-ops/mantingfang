@@ -348,6 +348,13 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Config diff contains exactly two changes: the target now points to the isolated bootstrap and loopback Mono debugging is enabled. `debug_address=127.0.0.1:10000`, `debug_suspend=false`, and the corlib override remains blank. New config SHA-256 is `7F259C46FEA4EC8DE746854EB7F82E71FDE5B562CF30A912611CE89E24F0A682`.
 - Stopped at `READY_FOR_DOORSTOP_DEBUGGER_TEST`. The game was not launched, no debugger client connected, and no runtime field, input, save, or memory operation occurred.
 
+## 2026-09-06 — Doorstop debugger transport real-game validation passed
+
+- The user manually started the game. Read-only inspection found responsive `Song.exe` PID `30092`, HWND `11995626`, from the expected Steam path.
+- `127.0.0.1:10000` has exactly one listener, owned by PID `30092`; a three-second follow-up sample confirmed the listener and responsive game process remained stable.
+- There were zero established connections, so no debugger client was attached. Configuration hash remained `7F259C46FEA4EC8DE746854EB7F82E71FDE5B562CF30A912611CE89E24F0A682`.
+- Result: `DOORSTOP_DEBUGGER_TRANSPORT=PASS`. Stopped before V2.3X4-D; no assembly enumeration, runtime-field read, telemetry enablement, input, save write, or memory write occurred.
+
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 
 - Fixed `TryReadResource` to use the cached reader instance instead of calling instance reflection from a static method.

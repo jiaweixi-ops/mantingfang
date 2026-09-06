@@ -316,3 +316,11 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Install only the bootstrap DLL under `DoorstopProbe`, preserving all game managed assemblies and BepInEx files.
 - [x] Back up `doorstop_config.ini` byte-for-byte and change only the bootstrap target plus loopback debugger settings.
 - [x] Stop at `READY_FOR_DOORSTOP_DEBUGGER_TEST`; do not start the game or connect a debugger.
+
+## V2.3X4-C Doorstop debugger transport boot validation
+
+- [x] User starts the game manually; never use process launch automation or game input.
+- [x] Confirm the new `Song.exe` is responsive and running from the expected Steam installation path.
+- [x] Confirm exactly one listener exists at `127.0.0.1:10000` and its owning PID exactly matches the current `Song.exe` PID.
+- [x] Re-check after a short interval and confirm there are no established debugger client connections.
+- [x] Record `DOORSTOP_DEBUGGER_TRANSPORT=PASS` and stop before any debugger client connection, assembly enumeration, or runtime-field access.

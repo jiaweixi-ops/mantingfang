@@ -195,6 +195,14 @@
 - The active config SHA-256 is now `7F259C46FEA4EC8DE746854EB7F82E71FDE5B562CF30A912611CE89E24F0A682`. Line comparison against the backup confirms only `target_assembly=DoorstopProbe\\DoorstopTelemetryBootstrap.dll` and `debug_enabled = true` changed.
 - Effective safety settings remain `dll_search_path_override =`, `debug_address = 127.0.0.1:10000`, and `debug_suspend = false`. Preparation stopped before game launch or debugger connection; status is `READY_FOR_DOORSTOP_DEBUGGER_TEST`.
 
+## 2026-09-06 — V2.3X4-C Doorstop debugger transport passed
+
+- After the user manually launched the game, `Song.exe` PID `30092` was responsive with HWND `11995626`, title `Song`, and the expected executable path. It started at `19:18:33`.
+- Exactly one TCP listener exists at `127.0.0.1:10000`, created at game start and owned by PID `30092`. The listener PID exactly matches the current `Song.exe` PID; it is not bound to a wildcard or public interface.
+- A second read-only sample after three seconds confirmed the game remained responsive, the same listener and PID remained present, and there were zero established connections on port `10000`.
+- The active Doorstop configuration remained unchanged at SHA-256 `7F259C46FEA4EC8DE746854EB7F82E71FDE5B562CF30A912611CE89E24F0A682`. The isolated no-op bootstrap therefore loads without preventing normal game startup and exposes only the loopback Mono debugger transport.
+- Verdict: `DOORSTOP_DEBUGGER_TRANSPORT=PASS`. No debugger client connected, no assembly or field was enumerated, and no runtime telemetry, input, save write, or memory write occurred.
+
 ## 2026-09-06 — V2.3X4-B Exact Unity Corlib Compatibility Test preparation
 
 - Preserved the original `Song_Data\\Managed` core files. Before the override, hashes were: `mscorlib.dll` `FC5B144B...4EA92CB`, `System.dll` `1252E720...78044E8`, `System.Core.dll` `A9A106E0...B77FC37`; `netstandard.dll` was absent.
