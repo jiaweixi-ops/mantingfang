@@ -287,3 +287,4 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Added strict Python value/type validation, including required named resources and boolean `build_menu_open`; runtime telemetry now fails closed unless `GOVERNOR_RUNTIME_GAME_VERSION` is configured when enabled.
 - Made opt-in auto-foreground a complete action transaction: foreground activation, fresh observation-cache invalidation, current-frame target resolution, input, and restoration are one boundary.
 - Added regression and source-contract checks; local verification is `116 passed`, compileall PASS, diff check PASS. The bridge remains unbuilt/uninjected because the required .NET/BepInEx/Unity SDK references are unavailable, and no Live E2E or game input was run.
+- GitHub Actions run `34025738670` passed Linux Python 3.11/3.12 and Windows Python 3.11/3.12.
