@@ -375,6 +375,9 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Planning scope is limited to four type-name booleans and one loopback connection with no retry. All runtime instance/state access and game input remain prohibited.
 - Added the pinned `net472` `MonoTypeExistenceProbe`, a dedicated CI artifact job, and contract tests that reject broad type enumeration plus all unauthorized runtime/state/control APIs.
 - Local verification passed with `126 passed`, Python compileall PASS, and diff check PASS. No V2.3X4-E debugger connection has occurred; execution awaits the exact CI artifact.
+- Pushed commit `3cd24648cd279b7c19d54fb790c84482ed60893b`; CI run `34030731666` passed all eight jobs and published the verified `MonoTypeExistenceProbe` artifact.
+- Executed exactly one connection attempt with a five-second outer timeout. It timed out with empty output, was terminated, and was not retried, so the four type-existence booleans remain unknown.
+- Post-failure checks passed: the same Song PID remained responsive and owned the loopback listener, with zero established connections. Result is `FAIL_TIMEOUT_SAFE`; no later debugger phase was started.
 
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 

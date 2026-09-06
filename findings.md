@@ -226,6 +226,11 @@
 - No instances, fields, properties, values, objects, threads, frames, locals, stacks, methods, breakpoints, suspension, writes, retries, telemetry, or game input are authorized.
 - The narrow client resolves the already-known `Unity.Model` and `Assembly-CSharp` assemblies, then uses only `AssemblyMirror.GetType(fullName, false, false)` to obtain four existence booleans. It deliberately excludes the broader VM-wide `GetTypes` API.
 - The endpoint and type-to-assembly mapping are compile-time fixed. Local verification is `126 passed`, Python compileall PASS, and diff check PASS; the client has not yet connected to the game.
+- CI run `34030731666` passed all eight jobs and built the exact source commit `3cd24648cd279b7c19d54fb790c84482ed60893b`. The downloaded probe is 6,144 bytes with SHA-256 `3C9D00B8FF6D3DB2E1D947D5CC3FEF4BDE0FF5476BE3AC7EC5045ED836D411CB`.
+- Metadata-only verification found pure managed IL, CLR metadata `v4.0.30319`, target framework `.NET Framework 4.7.2`, and direct references limited to `mscorlib`, `Mono.Debugger.Soft`, and `System`.
+- The one authorized connection attempt exceeded the five-second outer timeout and emitted no stdout or stderr, so none of the four type-existence results can be claimed. The probe process was terminated and was not retried.
+- After timeout cleanup, `Song.exe` PID `30092` remained responsive, still owned the sole `127.0.0.1:10000` listener, and there were zero established debugger connections.
+- Verdict: `MONO_DEBUGGER_TYPE_EXISTENCE=FAIL_TIMEOUT_SAFE`. Static contract and client source confirm zero instance/field/property/value access, method invocation, breakpoint, suspend, write, telemetry, or game input. Ignored evidence is `data/probe/V2.3X4E/result.json`.
 
 ## 2026-09-06 — V2.3X4-B Exact Unity Corlib Compatibility Test preparation
 

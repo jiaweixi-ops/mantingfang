@@ -342,7 +342,14 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Re-confirm the responsive `Song.exe`, exact loopback listener ownership, and zero established debugger connections.
 - [x] Add a single-purpose client that checks only the existence of `WSFramework.BaseData`, `WSFramework.SceneData`, `WSFramework.RootData`, and `UIBuildMenuViewCtrl`.
 - [x] Add source-contract tests that prohibit instance enumeration, field/property/value reads, method invocation, threads/frames/locals/stacks, breakpoints, suspend/resume, mutation, reconnect loops, and configurable endpoints.
-- [ ] Build and publish the exact client in CI, then download and verify that artifact before execution.
-- [ ] Execute at most one connection with a five-second outer timeout and save only the four requested boolean results.
-- [ ] Confirm disconnect, zero established connections, unchanged PID/listener ownership, and a responsive game.
-- [ ] Record and push the result, then stop before any instance or field access phase.
+- [x] Build and publish the exact client in CI, then download and verify that artifact before execution.
+- [x] Execute at most one connection with a five-second outer timeout; the client timed out without producing type booleans and was not retried.
+- [x] Confirm the timed-out client was terminated, zero established connections remained, PID/listener ownership was unchanged, and the game stayed responsive.
+- [x] Record and push the result, then stop before any instance or field access phase.
+
+### Errors encountered
+
+| Error | Attempt | Resolution |
+|---|---:|---|
+| PowerShell on the installed .NET runtime does not support `ReflectionOnlyLoadFrom` | 1 | Did not retry; use `dnfile` plus raw CLR metadata string inspection for the CI artifact. |
+| The single authorized type-existence probe exceeded the five-second outer timeout and emitted no stdout/stderr | 1 | Terminated only the probe process, verified zero debugger connections and a responsive game, prohibited retry, and recorded `FAIL_TIMEOUT_SAFE`. |
