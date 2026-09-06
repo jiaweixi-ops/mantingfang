@@ -617,6 +617,20 @@ def _roundtrip_element(
     return None
 
 
+def _close_only_runtime_target_candidates(calibrated_target: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    """Return formal current-frame ROI candidates for a close control.
+
+    Older calibration captured the close semantic from ``build_controls``.
+    Some live UI variants expose the actual close button in the upper-right
+    ``build_entry`` ROI instead.  Both are formal catalog regions; this helper
+    never carries a calibration bbox or invents coordinates.
+    """
+    candidates = [calibrated_target]
+    if calibrated_target.get("region") == "build_controls":
+        candidates.append({**calibrated_target, "region": "build_entry"})
+    return tuple(candidates)
+
+
 def _roundtrip_click_audit(
     info: Any,
     backend: Win32WindowBackend,
@@ -1248,6 +1262,220 @@ def run_live_build_menu_open_only(
         if report["result"] != "PASS":
             report["failure_class"] = "OPEN_ACTION_NOT_VERIFIED"
             report["failure_reason"] = "build_menu_open was not observed at any checkpoint"
+    except Exception as exc:  # noqa: BLE001 — one-click path fails closed
+        report["failure_class"] = type(exc).__name__
+        report["failure_reason"] = str(exc)
+        report["result"] = "FAIL"
+    finally:
+        store.set_runtime("live_armed", False)
+        report["arm_live"] = False
+        report["input_sent"] = report["total_inputs"] > 0
+        (output_dir / "result.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return report
+
+
+def run_live_build_menu_close_only(
+    settings: Settings,
+    store: SQLiteStore,
+    *,
+    output_dir: Path = Path("data/e2e/build_menu_close_only"),
+    window_title: str | None = None,
+    verify_timeout_seconds: float = 5.0,
+    poll_seconds: float = 0.25,
+    wait_for_game_foreground: bool = False,
+    foreground_timeout_seconds: float = 30.0,
+    checkpoints_ms: tuple[int, ...] = (200, 500, 1000, 2000),
+) -> dict[str, Any]:
+    """Run one guarded close-only click and never issue an open or placement input."""
+    if settings.execution_mode != "live" or not settings.allow_live_input:
+        raise E2EConfigurationError("close-only live diagnostic requires live mode and GOVERNOR_ALLOW_LIVE_INPUT=true")
+    if not store.get_runtime("live_armed", False):
+        raise E2EConfigurationError("close-only live diagnostic requires explicit live arming")
+    if verify_timeout_seconds <= 0 or poll_seconds <= 0 or not checkpoints_ms:
+        raise E2EConfigurationError("close-only verification timings must be positive")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    calibration_path = output_dir.parent / "build_menu_calibration.json"
+    if not calibration_path.exists():
+        raise E2EConfigurationError("build_menu_calibration.json is missing")
+    try:
+        calibration = json.loads(calibration_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise E2EConfigurationError("build_menu_calibration.json is invalid") from exc
+    calibrated_runtime_regions(calibration)
+    open_target = calibration.get("open")
+    close_target = calibration.get("close")
+    if not isinstance(open_target, dict) or not isinstance(close_target, dict):
+        raise E2EConfigurationError("calibration does not contain open and close targets")
+
+    report: dict[str, Any] = {
+        "scenario": "build_menu_close_only",
+        "max_clicks": 1,
+        "retry_input": False,
+        "open_action": {"enabled": False, "input_sent": False},
+        "placement_action": {"enabled": False, "input_sent": False},
+        "keyboard_input": False,
+        "total_inputs": 0,
+        "unexpected_inputs": 0,
+        "result": "FAIL",
+    }
+
+    try:
+        backend = Win32WindowBackend()
+        window = _locate_game_window(settings, backend, window_title)
+        capture = ClientAreaCapture(window, WindowsGraphicsCaptureBackend(), reject_near_black=True)
+        client = DeepSeekClient(
+            settings.deepseek_api_base,
+            settings.deepseek_api_key,
+            settings.deepseek_vision_model,
+            usage_callback=store.record_token_usage,
+        )
+        perception = PerceptionEngine(client, RegionCatalog(), model=settings.deepseek_vision_model)
+        if wait_for_game_foreground:
+            info = window.wait_for_foreground(
+                timeout_seconds=foreground_timeout_seconds,
+                stable_seconds=3.0,
+                poll_seconds=0.5,
+            )
+        else:
+            info = window.locate()
+        expected_pid = backend.window_process_id(info.hwnd)
+        if expected_pid is None:
+            raise E2EPreflightError("game PID is unavailable")
+        report["game"] = {
+            "hwnd": info.hwnd,
+            "pid": expected_pid,
+            "resolution": [info.client_width, info.client_height],
+        }
+        adapter = WindowsSendInputAdapter(
+            window,
+            Win32SendInputBackend(),
+            enabled=True,
+            allow_clicks=True,
+            allow_keyboard=False,
+            expected_pid=expected_pid,
+        )
+
+        deadline = time.monotonic() + verify_timeout_seconds
+        close_runtime_target = close_target
+        close_target_fallback_used = False
+        while True:
+            try:
+                before_info, before_frame, before_observation, before_dialog, before_details = _roundtrip_capture_and_observe(
+                    window,
+                    backend,
+                    perception,
+                    capture,
+                    output_dir / "before.png",
+                    close_runtime_target,
+                    expected_open=True,
+                    phase="close_only_before",
+                )
+                if before_info.hwnd != info.hwnd or backend.window_process_id(before_info.hwnd) != expected_pid:
+                    raise WindowError("window identity changed before close-only input")
+                break
+            except E2EPreflightError as exc:
+                if (
+                    ("calibrated target not resolved" in str(exc) or "state precondition mismatch" in str(exc))
+                    and not close_target_fallback_used
+                    and close_runtime_target is close_target
+                    and close_target.get("region") == "build_controls"
+                ):
+                    close_runtime_target = _close_only_runtime_target_candidates(close_target)[-1]
+                    close_target_fallback_used = True
+                    continue
+                if "state precondition mismatch" not in str(exc) and "calibrated target not resolved" not in str(exc):
+                    raise
+                if time.monotonic() >= deadline:
+                    raise E2EPreflightError(f"close-only precondition failed: {exc}") from exc
+                time.sleep(poll_seconds)
+        report["precondition"] = {
+            "build_menu_open": True,
+            "capture": before_details["capture"],
+            "foreground": before_details["foreground"],
+            "vision": _preflight_observation_summary(before_observation),
+            "dialog": _preflight_observation_summary(before_dialog),
+            "element": before_details["element"],
+        }
+        report["target_resolution"] = {
+            "calibrated_region": close_target.get("region"),
+            "runtime_region": close_runtime_target.get("region"),
+            "fallback_used": close_target_fallback_used,
+            "source": "current_frame_vision",
+        }
+        input_info = _roundtrip_pid_guard(window, backend, info.hwnd, expected_pid, "close-only input")
+        audit_frame = capture.capture()
+        diagnostic = audit_frame.diagnostic.to_dict() if audit_frame.diagnostic else {}
+        if diagnostic.get("near_black_frame"):
+            raise E2EPreflightError("CAPTURE_BLACK_FRAME before close-only input")
+        audit = _roundtrip_click_audit(input_info, backend, before_details["element"], close_runtime_target)
+        audit["source_screenshot"] = str(output_dir / "before_click_source.png")
+        audit["annotated_screenshot"] = str(output_dir / "before_annotated.png")
+        (output_dir / "before_click_source.png").write_bytes(audit_frame.png)
+        _annotate_click_frame(audit_frame, audit, output_dir / "before_annotated.png")
+        command = InputCommand(
+            "click",
+            (float(before_details["element"]["global_bbox"][0]) + float(before_details["element"]["global_bbox"][2])) / 2,
+            (float(before_details["element"]["global_bbox"][1]) + float(before_details["element"]["global_bbox"][3])) / 2,
+        )
+        input_result = adapter.execute(command)
+        report["total_inputs"] = 1
+        report["input"] = {
+            "backend": type(adapter.backend).__name__,
+            "action": "CLOSE_BUILD_MENU",
+            "target": before_details["element"],
+            "click_audit": audit,
+            "input_result": input_result,
+            "input_sent": True,
+        }
+
+        observations: list[dict[str, Any]] = []
+        checkpoint_start = time.monotonic()
+        for offset_ms in checkpoints_ms:
+            remaining = checkpoint_start + offset_ms / 1000 - time.monotonic()
+            if remaining > 0:
+                time.sleep(remaining)
+            checkpoint_path = output_dir / f"after_{offset_ms}ms.png"
+            try:
+                current_info, _frame, observation, dialog, details = _roundtrip_capture_and_observe(
+                    window,
+                    backend,
+                    perception,
+                    capture,
+                    checkpoint_path,
+                    open_target,
+                    expected_open=False,
+                    phase=f"close_only_after_{offset_ms}ms",
+                    enforce_state=False,
+                    require_target=False,
+                )
+                current_pid = backend.window_process_id(current_info.hwnd)
+                if current_info.hwnd != info.hwnd or current_pid != expected_pid:
+                    raise WindowError(f"window identity changed at {offset_ms}ms")
+                element = _roundtrip_element(observation, open_target, expected_role="BUILD_MENU_OPEN")
+                observations.append({
+                    "offset_ms": offset_ms,
+                    "build_menu_open": observation.get("build_menu_open"),
+                    "state_match": observation.get("build_menu_open") is False,
+                    "capture": details["capture"],
+                    "foreground": details["foreground"],
+                    "vision": _preflight_observation_summary(observation),
+                    "dialog": _preflight_observation_summary(dialog),
+                    "element": element,
+                    "screenshot": str(checkpoint_path),
+                })
+            except (WindowError, CaptureError) as exc:
+                raise E2EPreflightError(f"close-only verification failed at {offset_ms}ms: {exc}") from exc
+            except E2EPreflightError as exc:
+                observations.append({"offset_ms": offset_ms, "state_match": False, "error": str(exc), "screenshot": str(checkpoint_path)})
+        report["observations"] = observations
+        report["post_click_verification"] = {
+            "checkpoints_ms": list(checkpoints_ms),
+            "observations": observations,
+        }
+        report["result"] = "PASS" if any(item.get("state_match") and not item.get("dialog", {}).get("dialog_open", False) for item in observations) else "FAIL"
+        if report["result"] != "PASS":
+            report["failure_class"] = "CLOSE_ACTION_NOT_VERIFIED"
+            report["failure_reason"] = "build_menu_open remained true at every checkpoint"
     except Exception as exc:  # noqa: BLE001 — one-click path fails closed
         report["failure_class"] = type(exc).__name__
         report["failure_reason"] = str(exc)

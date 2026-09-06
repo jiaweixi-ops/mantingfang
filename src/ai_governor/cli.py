@@ -24,6 +24,7 @@ from .e2e import (
     calibrated_runtime_regions,
     resolve_build_menu_target,
     run_live_build_menu_open_only,
+    run_live_build_menu_close_only,
     run_live_build_menu_roundtrip,
     run_read_only_preflight,
 )
@@ -99,6 +100,13 @@ def build_parser() -> argparse.ArgumentParser:
     open_only.add_argument("--verify-timeout-seconds", type=float, default=5.0)
     open_only.add_argument("--poll-seconds", type=float, default=0.25)
     open_only.add_argument("--wait-for-game-foreground", action="store_true", help="wait without focusing until Song is foreground for 3 seconds")
+    close_only = sub.add_parser("e2e-build-menu-close-only", help="run one guarded Live click to close the build menu; never open or place")
+    close_only.add_argument("--confirm-live-close", action="store_true", help="required confirmation before the one real click")
+    close_only.add_argument("--output-dir", default="data/e2e/build_menu_close_only")
+    close_only.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
+    close_only.add_argument("--verify-timeout-seconds", type=float, default=5.0)
+    close_only.add_argument("--poll-seconds", type=float, default=0.25)
+    close_only.add_argument("--wait-for-game-foreground", action="store_true", help="wait without focusing until Song is foreground for 3 seconds")
     preflight = sub.add_parser("e2e-preflight", help="run read-only Steam capture and Vision preflight")
     preflight.add_argument("--wait-for-game-foreground", action="store_true", help="wait up to 30 seconds for Song to remain foreground for 3 seconds")
     preflight.add_argument("--timeout-seconds", type=float, default=30.0)
@@ -418,6 +426,25 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             try:
                 result = run_live_build_menu_open_only(
+                    settings,
+                    store,
+                    output_dir=Path(args.output_dir),
+                    window_title=args.title,
+                    verify_timeout_seconds=args.verify_timeout_seconds,
+                    poll_seconds=args.poll_seconds,
+                    wait_for_game_foreground=args.wait_for_game_foreground,
+                )
+            except (E2EConfigurationError, E2EPreflightError, DeepSeekConfigurationError, WindowError, CaptureError, OSError, ValueError) as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result.get("result") == "PASS" else 2
+        if args.command == "e2e-build-menu-close-only":
+            if not args.confirm_live_close:
+                print("ERROR: close-only live diagnostic requires --confirm-live-close", file=sys.stderr)
+                return 2
+            try:
+                result = run_live_build_menu_close_only(
                     settings,
                     store,
                     output_dir=Path(args.output_dir),

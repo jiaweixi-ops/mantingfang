@@ -124,6 +124,17 @@
 - Read-only Vision observed `build_menu_open=true` at 200ms, 500ms, 1000ms, and 2000ms; no unexpected dialog was reported.
 - The open menu screenshot visibly shows the construction panel. No close, placement, keyboard, or retry input was performed; final `live_armed=false`.
 
+## 2026-09-06 — V2.3D Close-only implementation
+
+- Added `run_live_build_menu_close_only` as an independent one-click path. It requires `build_menu_open=true`, resolves the CLOSE target from the current WGC/Vision frame, and never executes open, placement, keyboard, or retry actions.
+- Added CLI command `e2e-build-menu-close-only --confirm-live-close` with the same foreground wait option as open-only.
+- Added parser and live-mode guard regression tests. Local verification before the real attempt: `99 passed, 1 skipped`; Python 3.11 compileall PASS; `git diff --check` PASS.
+- No Live input has been sent by the implementation/test phase. The authorized real attempt remains the next action.
+- The first authorized close-only run stopped before input because the persisted `build_controls` ROI did not resolve a CLOSE element in the current frame. WGC capture, Song HWND `526608`, PID `26320`, and the open-state Vision schema were healthy; `total_inputs=0` and `live_armed=false`.
+- A read-only `build_entry` Vision probe found the actual visible `BUILD_MENU_CLOSE` control at confidence `0.95` with current-frame `global_bbox=[0.96, 0.1035, 0.984, 0.1305]`. The close-only path now permits only this formal-ROI fallback when the calibrated `build_controls` ROI has no current-frame target; no calibration bbox or guessed coordinate is reused.
+- A subsequent attempt captured the same visible open panel, while `build_controls` alone returned an inconsistent `build_menu_open=false`; it stopped before input. The fallback condition now also handles this old-ROI state mismatch and rechecks the richer formal `build_entry` ROI before any click.
+- Final bounded V2.3D attempt still failed closed on the `build_menu_open=true` precondition after the fallback recheck. No click was sent in any close-only attempt (`total_inputs=0` each time); the visible panel/capture is available, but Vision state is not stable enough to authorize input.
+
 - Use Python 3.11+ with a standard-library-first core to keep local/offline setup portable.
 - Use SQLite for durable local state and an append-only audit trail.
 - Use typed dataclasses and JSON validation at boundaries instead of passing arbitrary model output to an executor.

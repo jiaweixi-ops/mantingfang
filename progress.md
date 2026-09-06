@@ -194,3 +194,26 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - No close action, placement action, keyboard input, or retry occurred. Runtime disarmed automatically.
 - Evidence: `data/e2e/build_menu_open_only/result.json`, `before_annotated.png`, and `after_200ms.png` through `after_2000ms.png`.
 - Next gated phase: V2.3D close-only; do not start it automatically.
+
+## 2026-09-06 — V2.3D preparation
+
+- Implemented the close-only CLI and runtime path with `max_clicks=1`, `retry_input=false`, open/placement/keyboard disabled, current-frame target resolution, Win32 input audit, and read-only checkpoints at 200/500/1000/2000ms.
+- Verification completed: `99 passed, 1 skipped`; compileall PASS; diff check PASS.
+- Next: run exactly one authorized close click while the user keeps the already-open menu and Song window visible; then stop without starting roundtrip.
+
+## 2026-09-06 — V2.3D first attempt and bounded diagnosis
+
+- First close-only attempt failed closed before input: current `build_controls` Vision did not resolve the calibrated CLOSE element. Evidence is in `data/e2e/build_menu_close_only/result.json` and `before.png`; `total_inputs=0`, `arm_live=false`.
+- Read-only Vision of the existing formal `build_entry` ROI found the visible close control at confidence `0.95`; added a bounded runtime-region fallback from `build_controls` to `build_entry`, with no coordinate fallback and no input retry.
+- Next action remains one close-only attempt after verification; V2.3E roundtrip is still explicitly out of scope.
+
+## 2026-09-06 — V2.3D bounded ROI correction
+
+- The next attempt also sent zero input because the old `build_controls` ROI reported a state mismatch even though the saved screenshot visibly showed the open panel.
+- Updated the bounded fallback to switch to `build_entry` on either target absence or old-ROI state mismatch, then require the richer current-frame `build_menu_open=true` and CLOSE target before input.
+- Verification after this correction: `100 passed, 1 skipped`; compileall PASS; diff check PASS.
+
+## 2026-09-06 — V2.3D final bounded result
+
+- The final close-only execution stopped before input because the current-frame Vision precondition did not stably confirm `build_menu_open=true`, despite a valid Song capture. `total_inputs=0`, `unexpected_inputs=0`, and `arm_live=false`.
+- V2.3D is not marked PASS. The implementation and tests are ready, but a future attempt needs a stable open-state Vision result; V2.3E remains blocked and was not executed.

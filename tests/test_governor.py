@@ -31,9 +31,11 @@ from ai_governor.deepseek import DeepSeekClient, DeepSeekRequestError
 from ai_governor.e2e import (
     BuildMenuE2EHarness,
     E2EConfigurationError,
+    _close_only_runtime_target_candidates,
     _roundtrip_click_audit,
     calibrated_runtime_regions,
     finalize_build_menu_calibration,
+    run_live_build_menu_close_only,
     run_live_build_menu_open_only,
     run_live_build_menu_roundtrip,
     run_read_only_preflight,
@@ -140,10 +142,29 @@ def test_cli_exposes_guarded_open_only_command() -> None:
     assert args.confirm_live_open is True
 
 
+def test_cli_exposes_guarded_close_only_command() -> None:
+    args = build_parser().parse_args(["e2e-build-menu-close-only", "--confirm-live-close"])
+    assert args.command == "e2e-build-menu-close-only"
+    assert args.confirm_live_close is True
+
+
+def test_close_only_target_fallback_uses_formal_build_entry_roi_only() -> None:
+    target = {"region": "build_controls", "canonical_id": "build_menu_close_control", "role": "BUILD_MENU_CLOSE"}
+    candidates = _close_only_runtime_target_candidates(target)
+    assert [item["region"] for item in candidates] == ["build_controls", "build_entry"]
+    assert all("global_bbox" not in item for item in candidates)
+
+
 def test_open_only_requires_live_mode_before_window_or_input(store: SQLiteStore, tmp_path: Path) -> None:
     settings = Settings(db_path=tmp_path / "open-only.db", deepseek_api_key="test", deepseek_vision_model="vision")
     with pytest.raises(E2EConfigurationError, match="live mode"):
         run_live_build_menu_open_only(settings, store, output_dir=tmp_path / "open-only")
+
+
+def test_close_only_requires_live_mode_before_window_or_input(store: SQLiteStore, tmp_path: Path) -> None:
+    settings = Settings(db_path=tmp_path / "close-only.db", deepseek_api_key="test", deepseek_vision_model="vision")
+    with pytest.raises(E2EConfigurationError, match="live mode"):
+        run_live_build_menu_close_only(settings, store, output_dir=tmp_path / "close-only")
 
 
 def test_live_roundtrip_requires_live_mode_before_window_or_input(store: SQLiteStore, tmp_path: Path) -> None:

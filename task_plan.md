@@ -219,3 +219,12 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] WGC and non-black capture passed at 200/500/1000/2000ms.
 - [x] Automatic disarm completed and evidence saved under `data/e2e/build_menu_open_only/`.
 - [ ] V2.3D close-only Live E2E remains pending.
+
+## V2.3D Close-only Live E2E (2026-09-06)
+
+- [x] Add a dedicated `e2e-build-menu-close-only` command with a hard maximum of one click.
+- [x] Require the menu-open precondition, current-frame CLOSE target resolution, exact Song HWND/PID/foreground, WGC, and non-black capture.
+- [x] Disable open, placement, keyboard input, and click retry in this path.
+- [x] Persist before/annotated/200/500/1000/2000ms evidence and disarm automatically.
+- [x] Run pytest, compileall, and diff check before the authorized real attempt.
+- [ ] Execute the authorized close-only attempt; do not start V2.3E in the same turn.
