@@ -5,6 +5,7 @@ import os
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Any, Iterator, Protocol
 
 from .window import SteamWindowAdapter
@@ -18,6 +19,11 @@ class InputDisabled(InputError):
     pass
 
 
+class InputSafetyMode(StrEnum):
+    NORMAL = "normal"
+    PLACEMENT_CANCEL_ONLY = "placement_cancel_only"
+
+
 @dataclass(frozen=True)
 class InputCommand:
     kind: str
@@ -25,6 +31,7 @@ class InputCommand:
     y_ratio: float | None = None
     key: int | None = None
     geometry_snapshot: dict[str, Any] | None = None
+    target_role: str | None = None
 
     def __post_init__(self) -> None:
         if self.kind not in {"move", "click", "key_down", "key_up"}:
@@ -50,8 +57,10 @@ class SendInputBackend(Protocol):
 class DryRunInputAdapter:
     window: SteamWindowAdapter
     commands: list[dict[str, Any]]
+    safety_mode: InputSafetyMode = InputSafetyMode.NORMAL
 
     def execute(self, command: InputCommand) -> dict[str, Any]:
+        _enforce_safety_mode(self.safety_mode, command)
         info = self.window.locate()
         point = info.screen_point(command.x_ratio, command.y_ratio) if command.kind in {"move", "click"} else None
         record = {"kind": command.kind, "screen_point": point, "key": command.key, "simulated": True}
@@ -71,6 +80,7 @@ class WindowsSendInputAdapter:
     restore_previous_foreground: bool = True
     foreground_stable_seconds: float = 0.6
     foreground_timeout_seconds: float = 5.0
+    safety_mode: InputSafetyMode = InputSafetyMode.NORMAL
     _transaction_active: bool = field(default=False, init=False, repr=False)
 
     @contextmanager
@@ -118,6 +128,7 @@ class WindowsSendInputAdapter:
             return self._execute_current(command)
 
     def _execute_current(self, command: InputCommand) -> dict[str, Any]:
+        _enforce_safety_mode(self.safety_mode, command)
         if not self.enabled:
             raise InputDisabled("SendInput is disabled; use dry-run or explicitly arm live input")
         info = self.window.locate()
@@ -190,6 +201,16 @@ class WindowsSendInputAdapter:
             return {"kind": command.kind, "screen_point": (x, y), "simulated": False, "input_audit": audit}
         key_return = self.backend.key(command.key, command.kind == "key_down")
         return {"kind": command.kind, "key": command.key, "simulated": False, "return_count": key_return}
+
+
+def _enforce_safety_mode(mode: InputSafetyMode, command: InputCommand) -> None:
+    """Apply the phase allow-list before any adapter/backend operation."""
+    if mode is not InputSafetyMode.PLACEMENT_CANCEL_ONLY:
+        return
+    if command.kind != "click" or command.target_role != "BUILD_PLACEMENT_CANCEL":
+        raise InputDisabled(
+            "PLACEMENT_CANCEL_ONLY permits only a fresh BUILD_PLACEMENT_CANCEL click"
+        )
 
 
 class _Win32MouseInput(ctypes.Structure):

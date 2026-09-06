@@ -23,7 +23,7 @@ from ai_governor.capture import (
     encode_rgba_png,
     is_near_black_frame,
 )
-from ai_governor.input import DryRunInputAdapter, InputCommand, InputDisabled, InputError, WindowsSendInputAdapter
+from ai_governor.input import DryRunInputAdapter, InputCommand, InputDisabled, InputError, InputSafetyMode, WindowsSendInputAdapter
 from ai_governor.loop import CompositeObservationSource, GovernorLoop
 from ai_governor.config import Settings, load_persisted_settings, save_persisted_settings
 from ai_governor.cli import build_parser, main

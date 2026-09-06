@@ -59,6 +59,7 @@ def test_state_detector_classifies_category_and_selection() -> None:
     assert detect_build_menu_state(observation) is BuildMenuState.CATEGORY_OPEN
     observation["placement_mode"] = True
     observation["placement_confidence"] = 0.95
+    observation["placement_evidence_count"] = 2
     assert detect_build_menu_state(observation) is BuildMenuState.BUILDING_SELECTED
 
 

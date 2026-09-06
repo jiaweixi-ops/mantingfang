@@ -464,3 +464,13 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Safety counters remained zero for SendInput, mouse/keyboard, map/build clicks, save writes, memory writes, Runtime Telemetry, and Mono Debugger.
 - Code commit `5733160f65165d190b2eb6516d61f475ee1f2090` passed full local pytest (`155 passed`), compileall, diff check, and GitHub Actions run `34035801305`.
 - This follow-up only records delivery status. V2.4E was not started, and `data/probe/V2.4D/result.json` remains ignored.
+
+## 2026-09-06 — V2.4E0 started
+
+- User requested read-only BUILDING_SELECTED / PLACEMENT_ARMED and CANCEL calibration after V2.4D `PASS_SEMANTIC_MINIMUM`.
+- Scope is limited to a fresh CATEGORY_OPEN baseline, manual building selection, current-frame placement evidence, current-frame cancel calibration, manual cancel, and post-cancel read-only verification.
+- No automatic input, map target, placement target, Qwen call, telemetry, debugger, save write, or memory write is authorized.
+- Initial CLI attempt stopped safely at the baseline because the fresh frame classified as `UNKNOWN` rather than `CATEGORY_OPEN`. No manual selection prompt was reached and no input/model call occurred; the workflow is waiting for a fresh user-held ordinary category page.
+- Second read-only run started from a valid `CATEGORY_OPEN` baseline with 8 options and stable WGC geometry. After one user click, current-frame evidence detected `BUILDING_SELECTED` with confidence `0.9648`, three independent signals, and a `BUILD_PLACEMENT_CANCEL` candidate at confidence `0.98`.
+- The user then manually cancelled. The post-cancel WGC frame remained `UNKNOWN` and still contained red candidates, so the workflow returned `FAIL_SAFE_PLACEMENT_UNKNOWN`; it sent no input and did not claim V2.4E0 PASS.
+- The implementation was tightened to record the manual selection count, distinguish a persistent selected cancel candidate from other red controls, and preserve fail-closed post-cancel handling. Full local verification remains `162 passed`, compileall PASS, diff check PASS.

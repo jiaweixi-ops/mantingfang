@@ -92,6 +92,7 @@ class BuildMenuSnapshot:
     open_control: dict[str, Any] | None = None
     close_control: dict[str, Any] | None = None
     evidence: dict[str, Any] = field(default_factory=dict)
+    placement_cancel: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -103,6 +104,7 @@ class BuildMenuSnapshot:
             "open_control": self.open_control,
             "close_control": self.close_control,
             "evidence": self.evidence,
+            "placement_cancel": self.placement_cancel,
         }
 
 
@@ -256,6 +258,18 @@ def detect_build_menu_state(
     strong_closed = open_flag is False and _first_valid(
         elements, {"BUILD_MENU_OPEN", "BUILD_MENU_TOGGLE"}, min_confidence
     ) is not None and not strong_open
+    placement_confidence = observation.get("placement_confidence", observation.get("confidence"))
+    placement_evidence_count = observation.get("placement_evidence_count", 0)
+    strong_placement = (
+        observation.get("placement_mode") is True
+        and isinstance(placement_confidence, (int, float))
+        and not isinstance(placement_confidence, bool)
+        and float(placement_confidence) >= min_confidence
+        and isinstance(placement_evidence_count, int)
+        and placement_evidence_count >= 2
+    )
+    if strong_placement:
+        return BuildMenuState.BUILDING_SELECTED
     if strong_open and open_flag is not True:
         return BuildMenuState.UNKNOWN
     if strong_closed:
@@ -265,7 +279,6 @@ def detect_build_menu_state(
 
     placement = observation.get("placement_mode")
     selected = observation.get("building_selected")
-    placement_confidence = observation.get("placement_confidence", observation.get("confidence"))
     if (placement is True or selected is True) and isinstance(placement_confidence, (int, float)) and not isinstance(placement_confidence, bool) and float(placement_confidence) >= min_confidence:
         return BuildMenuState.BUILDING_SELECTED
     if evidence["options"] > 0 or observation.get("active_category"):
@@ -356,13 +369,18 @@ def parse_build_menu_snapshot(
         (dict(item) for item in elements if _valid_element(item, {"BUILD_MENU_CLOSE", "BUILD_MENU_TOGGLE"}, min_confidence)),
         None,
     )
+    placement_cancel = next(
+        (dict(item) for item in elements if _valid_element(item, {"BUILD_PLACEMENT_CANCEL"}, min_confidence)),
+        None,
+    )
     return BuildMenuSnapshot(
-        state,
-        current_screen,
-        categories,
-        options,
-        parsed_geometry,
-        open_control,
-        close_control,
-        evidence,
+        state=state,
+        current_screen=current_screen,
+        categories=categories,
+        options=options,
+        geometry=parsed_geometry,
+        open_control=open_control,
+        close_control=close_control,
+        evidence=evidence,
+        placement_cancel=placement_cancel,
     )

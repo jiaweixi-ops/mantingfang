@@ -110,6 +110,21 @@ Keep the local worktree clean. The remaining acceptance work is external calibra
 - Local verification: full pytest `155 passed`; `compileall -q src` passed; `git diff --check` passed.
 - GitHub Actions run `34035801305`: success; local `HEAD` matched `origin/main` before this record-only follow-up.
 - V2.4E was not started. Costs remain unresolved, so this is not `PASS_SEMANTIC_CALIBRATED`.
+
+## V2.4E0 BUILDING_SELECTED / CANCEL read-only calibration (2026-09-06)
+
+- [x] Add placement-state evidence that requires multiple current-frame signals and never trusts the fact that a user clicked.
+- [x] Add a current-frame `BUILD_PLACEMENT_CANCEL` resolver; placement/map ghost geometry is evidence only and never an actionable map target.
+- [x] Add `InputSafetyMode.PLACEMENT_CANCEL_ONLY` with an allow-list for a fresh cancel target and deny-list coverage for every other action.
+- [x] Add read-only manual-selection/manual-cancel calibration workflow and bounded evidence under `data/probe/V2.4E0/`.
+- [x] Add tests for state fail-closed behavior, stale identity/geometry, cancel-only gates, and zero placement actions.
+- [ ] Run the user-driven read-only calibration, pytest, compileall, diff check, commit/push, and CI. Do not enter V2.4E or V2.5 automated actions.
+
+Safety contract: SendInput, keyboard/mouse input, map clicks, save writes, memory writes, Runtime Telemetry, Mono Debugger, and Qwen calls remain zero in this phase.
+
+Current blocker: the first read-only run found `UNKNOWN` instead of `CATEGORY_OPEN` at the baseline and stopped before the manual-selection prompt. Do not reuse that frame; wait for a fresh user-held ordinary category page.
+
+Current real calibration result: placement state was detected with confidence `0.9648` and a fresh cancel candidate at `0.98`, but the post-manual-cancel frame was `UNKNOWN` and retained red candidates. The phase therefore remains fail-safe and is not accepted until cancellation is unambiguous.
 - Exactly one `qwen3.8-flash` call; Max calls 0; no retry. V2.4E is not started.
 
 ## V0.2 Game Integration backlog from latest acceptance

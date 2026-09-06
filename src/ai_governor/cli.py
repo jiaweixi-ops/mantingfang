@@ -30,6 +30,7 @@ from .e2e import (
 )
 from .build_category_e2e import BuildCategoryE2EError, run_build_category_dry_run, run_live_build_category_once
 from .build_option_semantics_e2e import run_read_only_build_option_semantics
+from .build_placement_e2e import BuildPlacementCalibrationError, run_read_only_placement_calibration
 from .build_menu_observer import BuildMenuCalibrationError, sample_build_menu_phase
 from .feishu import CommandRouter
 from .feishu_http import FeishuApiClient, FeishuCallbackServer, FeishuEventHandler
@@ -123,6 +124,10 @@ def build_parser() -> argparse.ArgumentParser:
     semantic = sub.add_parser("e2e-parse-build-options", help="read-only current-frame Build Option semantic parsing")
     semantic.add_argument("--output-dir", default="data/probe/V2.4D")
     semantic.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
+    placement = sub.add_parser("e2e-calibrate-placement-readonly", help="manual read-only V2.4E0 placement/cancel calibration")
+    placement.add_argument("--output-dir", default="data/probe/V2.4E0")
+    placement.add_argument("--title", help="exact game window title; defaults to GOVERNOR_GAME_WINDOW_TITLE")
+    placement.add_argument("--settle-seconds", type=float, default=0.35)
     preflight = sub.add_parser("e2e-preflight", help="run read-only Steam capture and Vision preflight")
     preflight.add_argument("--wait-for-game-foreground", action="store_true", help="wait up to 30 seconds for Song to remain foreground for 3 seconds")
     preflight.add_argument("--timeout-seconds", type=float, default=30.0)
@@ -556,6 +561,20 @@ def main(argv: list[str] | None = None) -> int:
                 return 2
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result.get("result", "").startswith("PASS_") else 2
+        if args.command == "e2e-calibrate-placement-readonly":
+            try:
+                result = run_read_only_placement_calibration(
+                    settings,
+                    store,
+                    output_dir=Path(args.output_dir),
+                    window_title=args.title,
+                    settle_seconds=args.settle_seconds,
+                )
+            except (BuildPlacementCalibrationError, WindowError, CaptureError, OSError, ValueError) as exc:
+                print(f"ERROR: {exc}", file=sys.stderr)
+                return 2
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result.get("result") == "PASS" else 2
         if args.command == "e2e-preflight":
             try:
                 result = run_read_only_preflight(
