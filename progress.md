@@ -490,3 +490,4 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Added explicit proven-slot loading and fresh-frame option planning. The existing V2.4E0 result has no proven slot identity, so the command must stop with `FAIL_PRECONDITION_NO_PROVEN_SAFE_SLOT` before any input rather than guess a card.
 - Added tests for rejecting manual click counts, legacy semantic samples, stale/non-current option evidence, and CLI confirmation.
 - Full local verification passed (`170 passed`, compileall, diff check). The authorized command stopped safely with `FAIL_PRECONDITION_NO_PROVEN_SAFE_SLOT`, zero clicks, zero input, zero Qwen calls, and disarmed state. Pending delivery commit/push and CI confirmation.
+- Delivery completed: commit `47750a165a2dab5e8fa42f0026edcdc8046a5e0e` is on `origin/main`; CI run `34038667741` passed all jobs. V2.4E/F remains blocked until a new explicit safe-slot identity is calibrated.

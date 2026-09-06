@@ -467,4 +467,6 @@ Result: `V2.4A/B-R=PASS_GEOMETRY_CALIBRATED`. CLOSED, ROOT_OPEN, and CATEGORY_OP
 - [x] Add fail-closed regression tests and CLI coverage; keep Qwen, telemetry, debugger, keyboard, map clicks, saves, and memory writes out of this phase.
 - [x] Execute the authorized live command with the existing E0 evidence; it persisted `FAIL_PRECONDITION_NO_PROVEN_SAFE_SLOT` with zero inputs because no explicit slot proof exists.
 - [ ] Obtain a new explicit safe-slot calibration identity before any future retry; do not infer it from the manual click count.
-- [ ] Run final delivery verification, commit, push, and CI confirmation.
+- [x] Run final delivery verification, commit, push, and CI confirmation.
+
+Delivery: commit `47750a165a2dab5e8fa42f0026edcdc8046a5e0e`; local `HEAD == origin/main`; GitHub Actions run `34038667741` passed all jobs.

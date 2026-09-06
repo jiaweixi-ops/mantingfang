@@ -324,6 +324,7 @@
 - The live path is capped at one fresh BUILD_OPTION click followed by one fresh BUILD_PLACEMENT_CANCEL click. It uses the existing exact HWND/PID/foreground/geometry/cursor/SendInput guards and changes to `PLACEMENT_CANCEL_ONLY` before the cancel action.
 - The first authorized execution is expected to stop before capture/input with `FAIL_PRECONDITION_NO_PROVEN_SAFE_SLOT` because the current E0 evidence lacks explicit slot identity. No input will be sent; live is disarmed in the terminal path.
 - Actual execution result: `FAIL_PRECONDITION_NO_PROVEN_SAFE_SLOT`; `option_clicks=0`, `cancel_clicks=0`, `input_sent=false`, `qwen_calls=0`, and `arm_live=false`. No game window was captured or focused by this command.
+- Delivery verification: commit `47750a165a2dab5e8fa42f0026edcdc8046a5e0e` is pushed; GitHub Actions run `34038667741` passed all Python, Windows, Bridge compile, and probe jobs.
 # V2.4C implementation notes (2026-09-06)
 
 - The live category action must resolve its category candidate from the same fresh WGC frame used for precondition validation. Earlier V2.4 calibration bboxes are non-actionable only.
