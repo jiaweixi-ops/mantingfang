@@ -308,5 +308,5 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 
 - [x] Restore the pre-corlib Doorstop configuration after the game process exited; keep the failed corlib set outside its configured lookup path for recoverability.
 - [x] Add a minimal, no-op Doorstop entrypoint that references neither BepInEx nor Unity.
-- [ ] Validate CI compilation and artifact publication for the bootstrap only.
+- [x] Validate CI compilation and artifact publication for the bootstrap only (GitHub Actions run `34029235704`).
 - [ ] Do not deploy the bootstrap or enable the Mono debugger until the user explicitly confirms the baseline game start is healthy.

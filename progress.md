@@ -331,6 +331,7 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Restored the exact pre-corlib Doorstop configuration after the game closed. The configured corlib override directory is no longer present; its official files remain in a clearly named rollback directory outside the configured search path because local safety policy rejected permanent recursive deletion.
 - Added a minimal `net40` Doorstop entrypoint and CI artifact job. It is intentionally source/CI-only: no bootstrap DLL is installed, no debugger server is enabled, and no game configuration points at it.
 - Local validation: `121 passed`, Python compileall PASS, and diff check PASS. CI artifact compilation is pending the pushed workflow run.
+- GitHub Actions run `34029235704` passed the no-op `net40` bootstrap build and uploaded the `DoorstopTelemetryBootstrap` artifact; all existing Python, Windows, and bridge-compile jobs also passed.
 
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 
