@@ -4,7 +4,9 @@ import json
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any
+from collections.abc import Callable
 
 from .models import Observation
 
@@ -25,6 +27,10 @@ class RuntimeTelemetrySchemaError(RuntimeTelemetryError):
 class RuntimeTelemetryClient:
     base_url: str = "http://127.0.0.1:18765"
     timeout_seconds: float = 1.5
+    expected_pid: int | None = None
+    expected_game_version: str | None = None
+    max_age_seconds: float = 2.0
+    clock: Callable[[], float] | None = None
 
     def _get_json(self, path: str) -> dict[str, Any]:
         request = urllib.request.Request(f"{self.base_url.rstrip('/')}{path}", method="GET")
@@ -46,6 +52,32 @@ class RuntimeTelemetryClient:
             raise RuntimeTelemetrySchemaError("unexpected runtime telemetry source")
         if payload.get("status") != "OK":
             raise RuntimeTelemetrySchemaError(f"runtime telemetry status={payload.get('status', 'MISSING')}")
+        if not isinstance(payload.get("game_pid"), int) or payload["game_pid"] <= 0:
+            raise RuntimeTelemetrySchemaError("runtime telemetry missing valid game_pid")
+        if self.expected_pid is not None and payload["game_pid"] != self.expected_pid:
+            raise RuntimeTelemetrySchemaError(
+                f"RUNTIME_PROCESS_CHANGED: expected={self.expected_pid}, actual={payload['game_pid']}"
+            )
+        game_version = payload.get("game_version")
+        if not isinstance(game_version, str) or not game_version.strip():
+            raise RuntimeTelemetrySchemaError("runtime telemetry missing game_version")
+        if self.expected_game_version and game_version != self.expected_game_version:
+            raise RuntimeTelemetrySchemaError(
+                f"RUNTIME_VERSION_MISMATCH: expected={self.expected_game_version}, actual={game_version}"
+            )
+        observed_at = payload.get("observed_at")
+        if not isinstance(observed_at, str) or not observed_at.strip():
+            raise RuntimeTelemetrySchemaError("runtime telemetry missing observed_at")
+        try:
+            timestamp = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise RuntimeTelemetrySchemaError("runtime telemetry observed_at is invalid") from exc
+        if timestamp.tzinfo is None:
+            raise RuntimeTelemetrySchemaError("runtime telemetry observed_at must include timezone")
+        now = self.clock() if self.clock is not None else datetime.now(timezone.utc).timestamp()
+        age = now - timestamp.timestamp()
+        if age < -self.max_age_seconds or age > self.max_age_seconds:
+            raise RuntimeTelemetrySchemaError(f"RUNTIME_STALE: snapshot_age_seconds={age:.3f}")
         required = {
             "city_name",
             "year",

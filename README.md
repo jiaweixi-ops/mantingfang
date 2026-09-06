@@ -103,7 +103,7 @@ py -3 -m pip install -e ".[windows-capture]"
 py -3 -m ai_governor.cli telemetry-read
 ```
 
-桥接协议和 Unity Mono 适配边界记录在 `runtime_bridge/README.md`。当前仓库不携带 BepInEx/Unity 第三方运行时依赖，也不会自动注入游戏进程；必须先由用户在本机完成版本匹配的只读桥接，再开启 `GOVERNOR_RUNTIME_TELEMETRY=true`。
+桥接协议和 Unity Mono 适配边界记录在 `runtime_bridge/README.md`。当前仓库包含只读桥接参考源码，但不携带 BepInEx/Unity 第三方运行时依赖，也不会自动注入游戏进程；必须先由用户在本机完成版本匹配的只读桥接，再开启 `GOVERNOR_RUNTIME_TELEMETRY=true`。遥测必须返回 `game_pid`、`game_version` 和带时区的 `observed_at`；Python 客户端会拒绝 PID/版本不匹配或超过 2 秒的旧快照。
 
 只读真实 Steam 预检可以等待用户自行把游戏置于前台；程序不抢焦点、不发送输入：
 
@@ -114,6 +114,10 @@ py -3 -m ai_governor.cli e2e-preflight --title Song --wait-for-game-foreground
 该命令最多等待 30 秒，并要求 `Song` 连续保持前台 3 秒，随后自动保存 `data/e2e/preflight.png` 和 `data/e2e/preflight_vision.json`，检查 `build_menu` 与 `dialog` 视觉结构。真实 Live E2E 仍需显式 `arm-live` 和 `--confirm-live-e2e`。
 
 `WindowsSendInputAdapter` 默认关闭；Task 4 只提供能力和策略边界，未将 live click/keyboard 接入 Governor。校准阶段使用 `DryRunInputAdapter`，不会向系统发送输入。
+
+Live Governor 会在启动时锁定 Song 的 HWND/PID，并在每次真实输入前重新验证 HWND、PID、前台窗口和目标几何快照。Vision 目标携带解析时的 client 尺寸、屏幕原点和 DPI；窗口移动、缩放或 DPI 改变会返回 `TARGET_STALE`，要求重新截图和解析，不会复用旧 bbox。
+
+如需允许真实操作前自动切换到游戏窗口，可以显式设置 `GOVERNOR_AUTO_FOREGROUND=true`。程序会保存原前台 HWND，激活 Song 后等待前台稳定，再执行已有的输入安全门；操作结束后按 `GOVERNOR_RESTORE_PREVIOUS_FOREGROUND` 尝试恢复原窗口。自动激活失败会阻止输入，不会调用后台窗口消息或绕过前台检查。默认仍为 `false`，以保持安全模式。
 
 动作引擎可以注入 `ScreenshotVerifier`。验证要求窗口仍存在、客户区未最小化且能够重新捕获 PNG；验证异常会把动作标记为 `uncertain` 并触发恢复态。需要人工决策的重大事件会先持久化并暂停 Watchdog，再发送飞书通知。
 

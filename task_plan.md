@@ -258,4 +258,15 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Add a separately documented Windows/Mono bridge contract; do not install or inject it automatically until exact external assemblies are verified.
 - [x] Add tests for Qwen configuration/provider behavior and telemetry schema/fail-safe handling.
 - [x] Run pytest, compileall, and diff check; never arm Live or send game input.
-- [ ] Commit and push after checks; push may remain blocked by the GitHub credential gate.
+- [x] Commit and push after checks; the previous Qwen/telemetry commit is already on `origin/main`.
+
+## V2.3X4 Runtime safety closure (2026-09-06)
+
+- [x] Remove DeepSeek production/test references and make Qwen the only provider path.
+- [x] Require telemetry PID, game version, timezone-aware `observed_at`, and a bounded snapshot age.
+- [x] Lock the production Live Governor to the Song HWND/PID at runtime creation.
+- [x] Add opt-in automatic foreground activation with stable wait, best-effort previous-window restore, and fail-closed behavior.
+- [x] Add geometry snapshots to observed UI targets; reject `TARGET_STALE` before mouse down/up when HWND, PID, client size, origin, or DPI changes.
+- [x] Add the read-only BepInEx/Unity bridge reference source and external-reference build contract; do not inject it automatically.
+- [x] Add Windows CI coverage for Python 3.11/3.12 module import, tests, compileall, and diff check.
+- [ ] Run CI after push and inspect both Linux and Windows jobs; do not run Live E2E in this phase.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 import pytest
 
@@ -66,11 +67,15 @@ def test_qwen_image_request_is_an_image_url_content_part(monkeypatch) -> None:
 
 
 def test_runtime_telemetry_accepts_verified_state(monkeypatch) -> None:
+    now = datetime.now(timezone.utc).isoformat()
     responses = {
         "/health": {"source": "runtime_bridge", "status": "OK"},
         "/state": {
             "source": "runtime_bridge",
             "status": "OK",
+            "game_pid": 26320,
+            "game_version": "1.0.0",
+            "observed_at": now,
             "city_name": "新的城市",
             "year": 1,
             "month": 4,
@@ -88,7 +93,7 @@ def test_runtime_telemetry_accepts_verified_state(monkeypatch) -> None:
         return _Response(responses[f"/{path}"])
 
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
-    observation = RuntimeTelemetryClient().observe()
+    observation = RuntimeTelemetryClient(expected_pid=26320, expected_game_version="1.0.0").observe()
 
     assert observation.source == "runtime-telemetry"
     assert observation.data["population"] == 10
@@ -105,10 +110,49 @@ def test_runtime_telemetry_rejects_unknown_state(monkeypatch) -> None:
 
 
 def test_runtime_telemetry_rejects_incomplete_ok_state(monkeypatch) -> None:
+    now = datetime.now(timezone.utc).isoformat()
     monkeypatch.setattr(
         "urllib.request.urlopen",
-        lambda request, timeout: _Response({"source": "runtime_bridge", "status": "OK", "gold": 1000}),
+        lambda request, timeout: _Response({
+            "source": "runtime_bridge",
+            "status": "OK",
+            "game_pid": 1,
+            "game_version": "1.0.0",
+            "observed_at": now,
+            "gold": 1000,
+        }),
     )
 
     with pytest.raises(RuntimeTelemetrySchemaError, match="missing fields"):
+        RuntimeTelemetryClient().read()
+
+
+def test_runtime_telemetry_rejects_process_version_and_stale_snapshot(monkeypatch) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    base = {
+        "source": "runtime_bridge",
+        "status": "OK",
+        "game_pid": 1,
+        "game_version": "old",
+        "observed_at": now,
+        "city_name": "新的城市",
+        "year": 1,
+        "month": 4,
+        "gold": 1000,
+        "population": 10,
+        "resources": {},
+        "buildings_count": 1,
+        "sites_count": 0,
+        "build_menu_open": False,
+    }
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: _Response(base))
+    with pytest.raises(RuntimeTelemetrySchemaError, match="RUNTIME_PROCESS_CHANGED"):
+        RuntimeTelemetryClient(expected_pid=2).read()
+    with pytest.raises(RuntimeTelemetrySchemaError, match="RUNTIME_VERSION_MISMATCH"):
+        RuntimeTelemetryClient(expected_game_version="new").read()
+
+    stale = dict(base, observed_at="2000-01-01T00:00:00+00:00")
+    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout: _Response(stale))
+    with pytest.raises(RuntimeTelemetrySchemaError, match="RUNTIME_STALE"):
         RuntimeTelemetryClient().read()

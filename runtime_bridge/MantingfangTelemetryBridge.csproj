@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>MantingfangTelemetryBridge</AssemblyName>
+    <RootNamespace>MantingfangTelemetryBridge</RootNamespace>
+    <BepInExPath Condition="'$(BepInExPath)' == ''">$(MSBuildProjectDirectory)\..\BepInEx</BepInExPath>
+    <UnityManagedPath Condition="'$(UnityManagedPath)' == ''">$(MSBuildProjectDirectory)\..\Song_Data\Managed</UnityManagedPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="BepInEx"><HintPath>$(BepInExPath)\core\BepInEx.dll</HintPath></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(UnityManagedPath)\UnityEngine.CoreModule.dll</HintPath></Reference>
+    <Reference Include="Unity.Model"><HintPath>$(UnityManagedPath)\Unity.Model.dll</HintPath></Reference>
+    <Reference Include="System.Web.Extensions" />
+  </ItemGroup>
+</Project>

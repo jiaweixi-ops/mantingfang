@@ -23,6 +23,7 @@ class InputCommand:
     x_ratio: float | None = None
     y_ratio: float | None = None
     key: int | None = None
+    geometry_snapshot: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if self.kind not in {"move", "click", "key_down", "key_up"}:
@@ -65,8 +66,12 @@ class WindowsSendInputAdapter:
     allow_clicks: bool = False
     allow_keyboard: bool = False
     expected_pid: int | None = None
+    auto_foreground: bool = False
+    restore_previous_foreground: bool = True
+    foreground_stable_seconds: float = 0.6
+    foreground_timeout_seconds: float = 5.0
 
-    def _guard_before_input(self, expected_hwnd: int, expected_pid: int | None) -> Any:
+    def _guard_before_input(self, expected_hwnd: int, expected_pid: int | None, expected_geometry: dict[str, Any] | None = None) -> Any:
         info = self.window.locate()
         if info.hwnd != expected_hwnd:
             raise InputError(f"refusing input: game HWND changed (expected={expected_hwnd}, actual={info.hwnd})")
@@ -77,14 +82,32 @@ class WindowsSendInputAdapter:
                 raise InputError(
                     f"refusing input: game PID changed (expected={expected_pid}, actual={actual_pid})"
                 )
+        if expected_geometry is not None:
+            if self.window.geometry_snapshot(info).to_dict() != expected_geometry:
+                raise InputError("TARGET_STALE: game geometry changed; re-resolve the target from a new frame")
         return info
 
     def execute(self, command: InputCommand) -> dict[str, Any]:
+        previous_foreground: int | None = None
+        if self.auto_foreground:
+            info = self.window.locate(restore_minimized=True)
+            info, previous_foreground = self.window.ensure_foreground(
+                info,
+                timeout_seconds=self.foreground_timeout_seconds,
+                stable_seconds=self.foreground_stable_seconds,
+            )
+        try:
+            return self._execute_current(command)
+        finally:
+            if self.auto_foreground and self.restore_previous_foreground:
+                self.window.restore_foreground(previous_foreground)
+
+    def _execute_current(self, command: InputCommand) -> dict[str, Any]:
         if not self.enabled:
             raise InputDisabled("SendInput is disabled; use dry-run or explicitly arm live input")
         info = self.window.locate()
-        # Never focus the game automatically. A foreground mismatch is a hard
-        # stop so SendInput cannot leak into another application.
+        # The wrapper may have activated the game, but this exact HWND/PID
+        # foreground check remains mandatory immediately before every input.
         self.window.require_foreground(info)
         if self.expected_pid is not None:
             actual_pid = self.window.backend.window_process_id(info.hwnd)
@@ -92,6 +115,9 @@ class WindowsSendInputAdapter:
                 raise InputError(
                     f"refusing input: game PID changed (expected={self.expected_pid}, actual={actual_pid})"
                 )
+        expected_geometry = command.geometry_snapshot
+        if expected_geometry is not None and self.window.geometry_snapshot(info).to_dict() != expected_geometry:
+            raise InputError("TARGET_STALE: game geometry changed; re-resolve the target from a new frame")
         if command.kind == "click" and not self.allow_clicks:
             raise InputDisabled("mouse clicks are not enabled by input policy")
         if command.kind in {"key_down", "key_up"} and not self.allow_keyboard:
@@ -119,7 +145,7 @@ class WindowsSendInputAdapter:
                 "input_backend": type(self.backend).__name__,
             }
             if command.kind == "click":
-                down_guard = self._guard_before_input(info.hwnd, self.expected_pid)
+                down_guard = self._guard_before_input(info.hwnd, self.expected_pid, expected_geometry)
                 audit["foreground_before_down"] = True
                 mouse_down = getattr(self.backend, "mouse_down", None)
                 mouse_up = getattr(self.backend, "mouse_up", None)
@@ -129,7 +155,7 @@ class WindowsSendInputAdapter:
                     if down_count != 1:
                         raise InputError(f"INPUT_INJECTION_FAILED: mouse_down return_count={down_count}")
                     time.sleep(0.05)
-                    self._guard_before_input(down_guard.hwnd, self.expected_pid)
+                    self._guard_before_input(down_guard.hwnd, self.expected_pid, expected_geometry)
                     audit["foreground_before_up"] = True
                     up_count = mouse_up()
                     audit["mouse_up"] = {"sent": up_count == 1, "return_count": up_count}

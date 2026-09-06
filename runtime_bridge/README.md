@@ -48,8 +48,26 @@ The implementation must satisfy these constraints:
 - return `UNKNOWN` when a field cannot be verified for the running game build;
 - include the process id and game version so the Python side can reject stale
   snapshots;
+- include an ISO-8601 `observed_at` timestamp; the Python side rejects snapshots
+  older than two seconds by default and rejects PID/version mismatches;
 - bind to loopback only and keep the HTTP surface to `/health` and `/state`;
 - do not log API keys, Feishu credentials, save contents, or full game objects.
+
+The repository includes `Plugin.cs`, `TelemetryServer.cs`, and
+`ReadOnlyStateReader.cs` as the reference implementation. Build it only after
+setting `BepInExPath` and `UnityManagedPath` to the exact local game-version
+assemblies, for example:
+
+```powershell
+dotnet build .\runtime_bridge\MantingfangTelemetryBridge.csproj `
+  -p:BepInExPath='C:\path\to\BepInEx' `
+  -p:UnityManagedPath='F:\SteamLibrary\steamapps\common\Thriving City Song\Song_Data\Managed'
+```
+
+The current installation has not been injected or modified automatically.
+Until this project is built against the exact installed BepInEx/Unity
+assemblies and its returned fields are cross-checked against the saved city,
+the Python client must remain disabled (`GOVERNOR_RUNTIME_TELEMETRY=false`).
 
 The V5 ZIP supplied during planning contains a reflective bridge prototype, but
 it depends on external BepInEx/Unity assemblies and is not a drop-in build for

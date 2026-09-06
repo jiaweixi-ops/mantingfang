@@ -62,7 +62,6 @@ class StateAggregator:
     source_priority: tuple[tuple[str, int], ...] = (
         ("runtime-telemetry", 110),
         ("readonly-memory", 100),
-        ("deepseek-vision", 50),
         ("qwen-vision", 50),
     )
 

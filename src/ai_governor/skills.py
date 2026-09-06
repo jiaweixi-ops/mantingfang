@@ -122,7 +122,12 @@ class SkillTranslator:
         except (TypeError, ValueError) as exc:
             raise SkillTranslationError(f"UI element bbox is not numeric: {target_id}") from exc
         command_kind = action.payload.get("command_kind", "click")
-        return self._command({"kind": command_kind, "x_ratio": x_ratio, "y_ratio": y_ratio})
+        return self._command({
+            "kind": command_kind,
+            "x_ratio": x_ratio,
+            "y_ratio": y_ratio,
+            "geometry_snapshot": element.get("geometry_snapshot"),
+        })
 
     def _command(self, raw: Any) -> InputCommand:
         if not isinstance(raw, dict) or not isinstance(raw.get("kind"), str):
@@ -133,6 +138,7 @@ class SkillTranslator:
                 x_ratio=raw.get("x_ratio"),
                 y_ratio=raw.get("y_ratio"),
                 key=raw.get("key"),
+                geometry_snapshot=raw.get("geometry_snapshot"),
             )
         except (TypeError, ValueError) as exc:
             raise SkillTranslationError(str(exc)) from exc

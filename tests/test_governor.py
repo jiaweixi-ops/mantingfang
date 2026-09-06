@@ -27,7 +27,7 @@ from ai_governor.input import DryRunInputAdapter, InputCommand, InputDisabled, I
 from ai_governor.loop import CompositeObservationSource, GovernorLoop
 from ai_governor.config import Settings, load_persisted_settings, save_persisted_settings
 from ai_governor.cli import build_parser
-from ai_governor.deepseek import DeepSeekClient, DeepSeekRequestError
+from ai_governor.qwen import QwenClient, QwenRequestError
 from ai_governor.e2e import (
     BuildMenuE2EHarness,
     E2EConfigurationError,
@@ -74,7 +74,7 @@ def test_store_round_trip_and_report(store: SQLiteStore) -> None:
 
 
 def test_store_records_token_usage(store: SQLiteStore) -> None:
-    store.record_token_usage({"kind": "vision", "model": "deepseek-vl", "prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14})
+    store.record_token_usage({"kind": "vision", "model": "qwen-vl", "prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14})
     assert store.token_usage_totals() == {"prompt_tokens": 10, "completion_tokens": 4, "total_tokens": 14}
 
 
@@ -83,46 +83,46 @@ def test_daily_report_includes_local_summary_and_state_delta(store: SQLiteStore,
     store.add_observation(Observation({"values": {"population": 12, "money": 100}}, source="readonly-memory"))
     settings = Settings(db_path=tmp_path / "report.db")
     ActionEngine(settings, store, DryRunExecutor()).execute_plan(ActionPlan("daily check", [PlannedAction("inspect_region", {"region": "resources"})]))
-    store.record_token_usage({"kind": "strategic", "model": "deepseek-reasoner", "prompt_tokens": 20, "completion_tokens": 5, "total_tokens": 25})
+    store.record_token_usage({"kind": "strategic", "model": "qwen-reasoner", "prompt_tokens": 20, "completion_tokens": 5, "total_tokens": 25})
     report = ReportService(store).daily_report()
     assert "今天完成了什么" in report
     assert "population" in report and "10 → 12" in report
     assert "Qwen 用量" in report and "total=25" in report
 
 
-def test_deepseek_client_records_usage_without_network() -> None:
+def test_qwen_client_records_usage_without_network() -> None:
     callback = []
-    client = DeepSeekClient("https://example.invalid", "key", "model", usage_callback=callback.append)
+    client = QwenClient("https://example.invalid", "key", "model", usage_callback=callback.append)
     client._record_usage({"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}, "model", "strategic")
     assert client.last_usage.to_dict() == {"kind": "strategic", "model": "model", "prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}
     assert callback == [client.last_usage.to_dict()]
 
 
-def test_persisted_deepseek_settings_round_trip_and_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_persisted_qwen_settings_round_trip_and_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = tmp_path / "settings.json"
     save_persisted_settings(
         {
-            "deepseek_api_base": "https://example.test/v1",
-            "deepseek_api_key": "secret",
-            "deepseek_vision_model": "vision-model",
-            "deepseek_reasoning_model": "reasoning-model",
+            "qwen_api_base": "https://example.test/v1",
+            "qwen_api_key": "secret",
+            "qwen_vision_model": "vision-model",
+            "qwen_reasoning_model": "reasoning-model",
             "ignored": "not persisted",
         },
         path,
     )
     assert load_persisted_settings(path) == {
-        "deepseek_api_base": "https://example.test/v1",
-        "deepseek_api_key": "secret",
-        "deepseek_vision_model": "vision-model",
-        "deepseek_reasoning_model": "reasoning-model",
+        "qwen_api_base": "https://example.test/v1",
+        "qwen_api_key": "secret",
+        "qwen_vision_model": "vision-model",
+        "qwen_reasoning_model": "reasoning-model",
     }
     monkeypatch.setenv("GOVERNOR_SETTINGS_PATH", str(path))
-    for name in ("DEEPSEEK_API_BASE", "DEEPSEEK_API_KEY", "DEEPSEEK_VISION_MODEL", "DEEPSEEK_REASONING_MODEL"):
+    for name in ("QWEN_API_BASE", "QWEN_API_KEY", "QWEN_VISION_MODEL", "QWEN_REASONING_MODEL"):
         monkeypatch.delenv(name, raising=False)
     settings = Settings.from_env()
-    assert settings.deepseek_reasoning_model == "reasoning-model"
-    monkeypatch.setenv("DEEPSEEK_REASONING_MODEL", "environment-model")
-    assert Settings.from_env().deepseek_reasoning_model == "environment-model"
+    assert settings.qwen_reasoning_model == "reasoning-model"
+    monkeypatch.setenv("QWEN_REASONING_MODEL", "environment-model")
+    assert Settings.from_env().qwen_reasoning_model == "environment-model"
 
 
 def test_cli_exposes_overlay_command() -> None:
@@ -156,29 +156,29 @@ def test_close_only_target_fallback_uses_formal_build_entry_roi_only() -> None:
 
 
 def test_open_only_requires_live_mode_before_window_or_input(store: SQLiteStore, tmp_path: Path) -> None:
-    settings = Settings(db_path=tmp_path / "open-only.db", deepseek_api_key="test", deepseek_vision_model="vision")
+    settings = Settings(db_path=tmp_path / "open-only.db", qwen_api_key="test", qwen_vision_model="vision")
     with pytest.raises(E2EConfigurationError, match="live mode"):
         run_live_build_menu_open_only(settings, store, output_dir=tmp_path / "open-only")
 
 
 def test_close_only_requires_live_mode_before_window_or_input(store: SQLiteStore, tmp_path: Path) -> None:
-    settings = Settings(db_path=tmp_path / "close-only.db", deepseek_api_key="test", deepseek_vision_model="vision")
+    settings = Settings(db_path=tmp_path / "close-only.db", qwen_api_key="test", qwen_vision_model="vision")
     with pytest.raises(E2EConfigurationError, match="live mode"):
         run_live_build_menu_close_only(settings, store, output_dir=tmp_path / "close-only")
 
 
 def test_live_roundtrip_requires_live_mode_before_window_or_input(store: SQLiteStore, tmp_path: Path) -> None:
-    settings = Settings(db_path=tmp_path / "roundtrip.db", deepseek_api_key="test", deepseek_vision_model="vision")
+    settings = Settings(db_path=tmp_path / "roundtrip.db", qwen_api_key="test", qwen_vision_model="vision")
     with pytest.raises(E2EConfigurationError, match="live mode"):
         run_live_build_menu_roundtrip(settings, store, output_dir=tmp_path / "e2e")
 
 
-def test_deepseek_client_rejects_negative_retry_count() -> None:
+def test_qwen_client_rejects_negative_retry_count() -> None:
     with pytest.raises(ValueError, match="max_retries"):
-        DeepSeekClient("https://example.invalid", "key", "model", max_retries=-1)
+        QwenClient("https://example.invalid", "key", "model", max_retries=-1)
 
 
-def test_deepseek_client_retries_http_429_and_records_response_usage(monkeypatch) -> None:
+def test_qwen_client_retries_http_429_and_records_response_usage(monkeypatch) -> None:
     calls = []
 
     class Response:
@@ -203,13 +203,13 @@ def test_deepseek_client_retries_http_429_and_records_response_usage(monkeypatch
         return Response()
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    client = DeepSeekClient("https://example.invalid", "key", "model", max_retries=1, backoff_seconds=0, sleep_fn=lambda _: None)
+    client = QwenClient("https://example.invalid", "key", "model", max_retries=1, backoff_seconds=0, sleep_fn=lambda _: None)
     assert client.complete_json([{"role": "user", "content": "{}"}]) == {"ok": True}
     assert len(calls) == 2
     assert client.usage_totals["total_tokens"] == 6
 
 
-def test_deepseek_vision_request_contains_image_in_user_message(monkeypatch) -> None:
+def test_qwen_vision_request_contains_image_in_user_message(monkeypatch) -> None:
     captured = {}
 
     class Response:
@@ -227,7 +227,7 @@ def test_deepseek_vision_request_contains_image_in_user_message(monkeypatch) -> 
         return Response()
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    DeepSeekClient("https://example.invalid", "secret-key", "vision-model").analyze_image_json(
+    QwenClient("https://example.invalid", "secret-key", "vision-model").analyze_image_json(
         b"png-bytes", "return JSON", model="vision-model"
     )
     messages = captured["payload"]["messages"]
@@ -237,7 +237,7 @@ def test_deepseek_vision_request_contains_image_in_user_message(monkeypatch) -> 
     assert messages[1]["content"][1]["image_url"]["url"].startswith("data:image/png;base64,")
 
 
-def test_deepseek_http_error_masks_api_key(monkeypatch) -> None:
+def test_qwen_http_error_masks_api_key(monkeypatch) -> None:
     secret = "super-secret-api-key"
 
     def fake_urlopen(request, timeout):
@@ -250,8 +250,8 @@ def test_deepseek_http_error_masks_api_key(monkeypatch) -> None:
         )
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
-    with pytest.raises(DeepSeekRequestError) as raised:
-        DeepSeekClient("https://example.invalid", secret, "vision-model", max_retries=0).complete_json(
+    with pytest.raises(QwenRequestError) as raised:
+        QwenClient("https://example.invalid", secret, "vision-model", max_retries=0).complete_json(
             [{"role": "user", "content": "{}"}]
         )
     assert raised.value.status_code == 400
@@ -603,7 +603,7 @@ def test_major_event_coordinator_pauses_without_feishu(store: SQLiteStore) -> No
     event = coordinator.handle([
         Observation(
             {"events": [{"title": "粮食危机", "body": "粮食即将耗尽", "severity": "critical"}]},
-            source="deepseek-vision",
+            source="qwen-vision",
             region="events",
         )
     ])[0]
@@ -650,7 +650,7 @@ def test_governor_sends_canonical_state_to_brain(store: SQLiteStore, tmp_path: P
     brain = CapturingBrain({"reason": "inspect", "actions": []})
     engine = ActionEngine(settings, store, DryRunExecutor())
     result = Governor(store, brain, engine, Watchdog(store)).run_observations([
-        Observation({"population": 8}, source="deepseek-vision", region="resources"),
+        Observation({"population": 8}, source="qwen-vision", region="resources"),
         Observation({"values": {"population": 9, "food": 100}}, source="readonly-memory", region="memory"),
     ])
     assert result["status"] == "executed"
@@ -671,7 +671,7 @@ def test_governor_runs_persisted_safe_cycle(store: SQLiteStore, tmp_path: Path) 
 
 def test_canonical_state_prefers_memory_and_records_conflict() -> None:
     state = StateAggregator().aggregate([
-        Observation({"population": 100, "money": 50}, source="deepseek-vision", region="resources", observed_at="2026-09-05T10:00:00+00:00"),
+        Observation({"population": 100, "money": 50}, source="qwen-vision", region="resources", observed_at="2026-09-05T10:00:00+00:00"),
         Observation({"values": {"population": 120, "food": 300}}, source="readonly-memory", region="memory", observed_at="2026-09-05T10:00:01+00:00"),
     ])
     assert state.values == {"population": 120, "money": 50, "food": 300}
@@ -681,8 +681,8 @@ def test_canonical_state_prefers_memory_and_records_conflict() -> None:
 
 def test_canonical_state_normalizes_chinese_fields_and_keeps_map_data() -> None:
     state = StateAggregator().aggregate([
-        Observation({"人口": 8, "粮食": 40}, source="deepseek-vision", region="resources"),
-        Observation({"buildings": [{"type": "farm", "x": 3, "y": 4}]}, source="deepseek-vision", region="map"),
+        Observation({"人口": 8, "粮食": 40}, source="qwen-vision", region="resources"),
+        Observation({"buildings": [{"type": "farm", "x": 3, "y": 4}]}, source="qwen-vision", region="map"),
     ])
     assert state.values["population"] == 8
     assert state.values["food"] == 40
@@ -691,8 +691,8 @@ def test_canonical_state_normalizes_chinese_fields_and_keeps_map_data() -> None:
 
 def test_canonical_state_keeps_ui_elements_separated_by_region() -> None:
     state = StateAggregator().aggregate([
-        Observation({"ui_elements": [{"id": "build", "global_bbox": [0.1, 0.8, 0.2, 0.9]}]}, source="deepseek-vision", region="build_menu"),
-        Observation({"ui_elements": [{"id": "confirm", "global_bbox": [0.4, 0.4, 0.6, 0.6]}]}, source="deepseek-vision", region="dialog"),
+        Observation({"ui_elements": [{"id": "build", "global_bbox": [0.1, 0.8, 0.2, 0.9]}]}, source="qwen-vision", region="build_menu"),
+        Observation({"ui_elements": [{"id": "confirm", "global_bbox": [0.4, 0.4, 0.6, 0.6]}]}, source="qwen-vision", region="dialog"),
     ])
     assert set(state.values["ui_elements_by_region"]) == {"build_menu", "dialog"}
     assert state.values["ui_elements_by_region"]["dialog"][0]["id"] == "confirm"
@@ -702,7 +702,7 @@ def test_major_event_detector_deduplicates_structured_vision_events(store: SQLit
     detector = MajorEventDetector(store)
     observation = Observation({
         "events": [{"title": "粮食危机", "body": "粮食即将耗尽", "severity": "critical"}],
-    }, source="deepseek-vision", region="events")
+    }, source="qwen-vision", region="events")
     first = detector.detect([observation])
     assert len(first) == 1
     assert first[0].requires_decision is True
@@ -1036,7 +1036,7 @@ def test_steam_vision_source_reuses_unchanged_roi_analysis() -> None:
 
         def observe_rgba(self, rgba, width, height, region_name, *, context=""):
             self.calls.append(region_name)
-            return Observation({"region_value": region_name}, source="deepseek-vision", region=region_name)
+            return Observation({"region_value": region_name}, source="qwen-vision", region=region_name)
 
     clock_value = [0.0]
     perception = Perception()
@@ -1140,6 +1140,9 @@ class FakeWindowBackend:
 
     def restore(self, hwnd: int) -> None:
         self.restored = True
+
+    def activate(self, hwnd: int) -> None:
+        self.foreground = hwnd
 
     def client_rect(self, hwnd: int):
         return (0, 0, 1920, 1080)
@@ -1273,6 +1276,17 @@ def test_window_diagnostic_marks_different_hwnd_same_game_process() -> None:
     assert diagnostic.flags == ("FOREGROUND_SAME_GAME_PROCESS_DIFFERENT_HWND",)
 
 
+def test_window_adapter_can_activate_and_restore_previous_foreground() -> None:
+    backend = FakeWindowBackend()
+    backend.foreground = 100
+    window = SteamWindowAdapter("满庭芳：宋上繁华", backend)
+    info, previous = window.ensure_foreground(info=window.locate(), timeout_seconds=0.5, stable_seconds=0.01, poll_seconds=0.01)
+    assert info.hwnd == 99
+    assert previous == 100
+    window.restore_foreground(previous)
+    assert backend.foreground == 100
+
+
 def test_read_only_preflight_does_not_require_foreground(monkeypatch, tmp_path: Path, store: SQLiteStore) -> None:
     class VisibleCaptureBackend:
         backend_name = "WindowsGraphicsCaptureBackend"
@@ -1307,11 +1321,11 @@ def test_read_only_preflight_does_not_require_foreground(monkeypatch, tmp_path: 
     backend.foreground = 100
     monkeypatch.setattr("ai_governor.e2e.Win32WindowBackend", lambda: backend)
     monkeypatch.setattr("ai_governor.e2e.WindowsGraphicsCaptureBackend", VisibleCaptureBackend)
-    monkeypatch.setattr("ai_governor.e2e.DeepSeekClient", VisionClient)
+    monkeypatch.setattr("ai_governor.e2e.QwenClient", VisionClient)
     settings = Settings(
         db_path=tmp_path / "preflight.db",
-        deepseek_api_key="test-key",
-        deepseek_vision_model="test-vision",
+        qwen_api_key="test-key",
+        qwen_vision_model="test-vision",
     )
     report = run_read_only_preflight(settings, store, output_dir=tmp_path / "e2e")
     assert report["foreground"]["foreground_matches_game_hwnd"] is False
@@ -1337,8 +1351,8 @@ def test_read_only_preflight_does_not_fallback_when_wgc_is_unavailable(monkeypat
     monkeypatch.setattr("ai_governor.e2e.WindowsGraphicsCaptureBackend", unavailable)
     settings = Settings(
         db_path=tmp_path / "preflight-wgc.db",
-        deepseek_api_key="test-key",
-        deepseek_vision_model="test-vision",
+        qwen_api_key="test-key",
+        qwen_vision_model="test-vision",
     )
     with pytest.raises(CaptureBackendUnavailable, match="WGC_UNAVAILABLE"):
         run_read_only_preflight(settings, store, output_dir=tmp_path / "e2e")
@@ -1418,6 +1432,79 @@ def test_live_input_is_disabled_by_default() -> None:
     adapter = WindowsSendInputAdapter(SteamWindowAdapter("满庭芳：宋上繁华", FakeWindowBackend()), object())
     with pytest.raises(InputDisabled, match="disabled"):
         adapter.execute(InputCommand("click", 0.5, 0.5))
+
+
+def test_auto_foreground_activates_only_when_explicitly_enabled() -> None:
+    backend = FakeWindowBackend()
+    backend.foreground = 100
+
+    class Backend:
+        def move_absolute(self, x, y):
+            return 1
+
+        def cursor_position(self):
+            return (1060, 590)
+
+        def mouse_down(self):
+            return 1
+
+        def mouse_up(self):
+            return 1
+
+        def key(self, virtual_key, down):
+            return 1
+
+    adapter = WindowsSendInputAdapter(
+        SteamWindowAdapter("满庭芳：宋上繁华", backend),
+        Backend(),
+        enabled=True,
+        allow_clicks=True,
+        auto_foreground=True,
+        restore_previous_foreground=True,
+        foreground_stable_seconds=0.01,
+        foreground_timeout_seconds=0.5,
+        expected_pid=39408,
+    )
+    result = adapter.execute(InputCommand("click", 0.5, 0.5))
+    assert result["simulated"] is False
+    assert backend.foreground == 100
+
+
+def test_geometry_change_blocks_live_input_before_send() -> None:
+    backend = FakeWindowBackend()
+    backend.foreground = 99
+    calls = []
+
+    class Backend:
+        def move_absolute(self, x, y):
+            calls.append((x, y))
+            return 1
+
+        def cursor_position(self):
+            return (1060, 590)
+
+        def mouse_down(self):
+            calls.append("down")
+            return 1
+
+        def mouse_up(self):
+            calls.append("up")
+            return 1
+
+        def key(self, virtual_key, down):
+            return 1
+
+    adapter = WindowsSendInputAdapter(
+        SteamWindowAdapter("满庭芳：宋上繁华", backend),
+        Backend(),
+        enabled=True,
+        allow_clicks=True,
+        expected_pid=39408,
+    )
+    stale = {**SteamWindowAdapter("满庭芳：宋上繁华", backend).geometry_snapshot().to_dict(), "client_width": 1}
+    with pytest.raises(InputError, match="TARGET_STALE"):
+        adapter.execute(InputCommand("click", 0.5, 0.5, geometry_snapshot=stale))
+    assert calls == []
 
 
 def test_live_input_refuses_non_foreground_window() -> None:

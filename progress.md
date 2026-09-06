@@ -262,3 +262,12 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Added `RuntimeTelemetryClient`, `RuntimeTelemetryObservationSource`, and `telemetry-read`. Missing bridge or `UNKNOWN/BLOCKED` state fails closed and never fabricates zero values.
 - Added `runtime_bridge/README.md` with the loopback-only, read-only `/health` and `/state` contract. The supplied V5 bridge remains reference-only because its BepInEx/Unity assemblies are not installed or verified here.
 - Added provider/telemetry tests, including rejection of incomplete `status=OK` snapshots. Verification: `107 passed`, `python -m compileall -q src` PASS, `git diff --check` PASS. No Live E2E, `arm-live`, mouse/keyboard input, process-memory write, or secret file was used.
+
+## 2026-09-06 — V2.3X4 runtime safety closure
+
+- Removed DeepSeek code, settings, fallback, and test references; `rg -i deepseek src tests .env.example pyproject.toml` now returns zero matches. README keeps only the explicit statement that DeepSeek is not used.
+- Runtime telemetry now requires `game_pid`, `game_version`, timezone-aware `observed_at`, and complete core city fields; PID/version mismatch and snapshots outside the two-second age window fail as `RUNTIME_PROCESS_CHANGED`, `RUNTIME_VERSION_MISMATCH`, or `RUNTIME_STALE`.
+- Production Live runtime locks Song PID, and the input adapter supports opt-in `GOVERNOR_AUTO_FOREGROUND`, stable foreground waiting, previous-window restore, and fail-closed activation errors. Default remains automatic foreground disabled.
+- Vision UI targets now carry HWND/PID/client geometry/origin/DPI snapshots. Any change before input returns `TARGET_STALE` and prevents mouse down/up.
+- Added `runtime_bridge/Plugin.cs`, `TelemetryServer.cs`, `ReadOnlyStateReader.cs`, and a conditional-reference `.csproj`. It is source-complete as a read-only reference but has not been injected or built against external BepInEx/Unity assemblies on this machine.
+- Added a Windows GitHub Actions job for Python 3.11/3.12 import, tests, compileall, and diff check. Local verification: `111 passed`, compileall PASS, diff check PASS. No Live E2E, `arm-live`, game input, process-memory write, or secret file was used.

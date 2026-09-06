@@ -34,3 +34,31 @@ jobs:
         run: python -m compileall -q src
       - name: Check diff whitespace
         run: git diff --check
+
+  windows-core:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pip pytest
+      - name: Install package
+        run: python -m pip install -e .
+      - name: Import Windows-capable modules
+        run: python -c "import ai_governor.cli, ai_governor.capture, ai_governor.input, ai_governor.window"
+      - name: Run tests
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+        run: python -m pytest -q
+      - name: Compile source
+        run: python -m compileall -q src
+      - name: Check diff whitespace
+        run: git diff --check

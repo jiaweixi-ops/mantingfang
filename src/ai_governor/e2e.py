@@ -26,27 +26,11 @@ class E2EPreflightError(RuntimeError):
     pass
 
 
-# Compatibility aliases keep existing test doubles and older callers stable;
-# all production E2E requests now use the Qwen-compatible client and settings.
-DeepSeekClient = QwenClient
-DeepSeekConfigurationError = QwenConfigurationError
-
-
 def _qwen_runtime_config(settings: Settings) -> tuple[str, str, str]:
-    """Return Qwen settings, with a narrow legacy-fixture fallback.
-
-    Older local tests construct Settings with the pre-migration DeepSeek field
-    names. The fallback keeps those tests deterministic without changing the
-    production Settings.from_env path, which requires QWEN_* configuration.
-    """
-    api_base = settings.qwen_api_base
-    api_key = settings.qwen_api_key
-    model = settings.qwen_vision_model
-    if api_key and model:
-        return api_base, api_key, model
-    if settings.deepseek_api_key and settings.deepseek_vision_model:
-        return settings.deepseek_api_base, settings.deepseek_api_key, settings.deepseek_vision_model
-    raise QwenConfigurationError("QWEN_API_KEY and QWEN_VISION_MODEL are not configured")
+    """Return the strictly configured Qwen Vision endpoint and model."""
+    if not settings.qwen_api_key or not settings.qwen_vision_model:
+        raise QwenConfigurationError("QWEN_API_KEY and QWEN_VISION_MODEL are not configured")
+    return settings.qwen_api_base, settings.qwen_api_key, settings.qwen_vision_model
 
 
 def _preflight_observation_summary(data: dict[str, Any]) -> dict[str, Any]:
@@ -334,7 +318,7 @@ def calibrate_build_menu_state(
         info = window.locate()
     capture = ClientAreaCapture(window, WindowsGraphicsCaptureBackend())
     frame = capture.capture()
-    client = DeepSeekClient(
+    client = QwenClient(
         api_base,
         api_key,
         vision_model,
@@ -541,7 +525,7 @@ def resolve_build_menu_target(
     diagnostic = frame.diagnostic.to_dict() if frame.diagnostic else {}
     if diagnostic.get("near_black_frame"):
         raise E2EPreflightError("CAPTURE_BLACK_FRAME")
-    client = DeepSeekClient(
+    client = QwenClient(
         api_base,
         api_key,
         vision_model,
@@ -854,7 +838,7 @@ def run_live_build_menu_roundtrip(
         window = _locate_game_window(settings, backend, window_title)
         capture = ClientAreaCapture(window, WindowsGraphicsCaptureBackend(), reject_near_black=True)
         api_base, api_key, vision_model = _qwen_runtime_config(settings)
-        client = DeepSeekClient(
+        client = QwenClient(
             api_base,
             api_key,
             vision_model,
@@ -1145,7 +1129,7 @@ def run_live_build_menu_open_only(
         window = _locate_game_window(settings, backend, window_title)
         capture = ClientAreaCapture(window, WindowsGraphicsCaptureBackend(), reject_near_black=True)
         api_base, api_key, vision_model = _qwen_runtime_config(settings)
-        client = DeepSeekClient(
+        client = QwenClient(
             api_base,
             api_key,
             vision_model,
@@ -1343,7 +1327,7 @@ def run_live_build_menu_close_only(
         window = _locate_game_window(settings, backend, window_title)
         capture = ClientAreaCapture(window, WindowsGraphicsCaptureBackend(), reject_near_black=True)
         api_base, api_key, vision_model = _qwen_runtime_config(settings)
-        client = DeepSeekClient(
+        client = QwenClient(
             api_base,
             api_key,
             vision_model,
@@ -1597,7 +1581,7 @@ def run_read_only_preflight(
     }
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    client = DeepSeekClient(
+    client = QwenClient(
         api_base,
         api_key,
         vision_model,

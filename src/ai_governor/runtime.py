@@ -75,6 +75,16 @@ class SteamVisionObservationSource:
                 region_name,
                 context="Governor 运行时状态采集",
             )
+            elements = observation.data.get("ui_elements")
+            capture_window = getattr(self.capture, "window", None)
+            capture_info = getattr(self.capture, "last_info", None)
+            if isinstance(elements, list) and capture_window is not None and capture_info is not None:
+                geometry = capture_window.geometry_snapshot(capture_info).to_dict()
+                observation.data["ui_elements"] = [
+                    {**element, "geometry_snapshot": geometry}
+                    for element in elements
+                    if isinstance(element, dict)
+                ]
             self._cache[region_name] = (signature, now, observation)
             observations.append(observation)
             changed.append(region_name)
@@ -138,7 +148,15 @@ def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str]
     vision_source = SteamVisionObservationSource(capture, perception, tuple(regions))
     sources = []
     if settings.runtime_telemetry_enabled:
-        sources.append(RuntimeTelemetryObservationSource(RuntimeTelemetryClient(settings.runtime_bridge_url)))
+        game_info = window.locate()
+        game_pid = window.backend.window_process_id(game_info.hwnd)
+        if game_pid is None:
+            raise RuntimeConfigurationError("runtime telemetry requires a readable Song PID")
+        sources.append(RuntimeTelemetryObservationSource(RuntimeTelemetryClient(
+            settings.runtime_bridge_url,
+            expected_pid=game_pid,
+            expected_game_version=settings.runtime_game_version,
+        )))
     sources.append(vision_source)
     if settings.memory_profile_path is not None:
         profile = MemoryProfile.from_json(settings.memory_profile_path)
@@ -198,12 +216,21 @@ def build_runtime(settings: Settings, store: SQLiteStore, regions: Iterable[str]
         verifier = None
     else:
         translator = SkillTranslator(ui_element_supplier=resolve_ui_element)
+        live_info = window.locate(restore_minimized=True)
+        live_pid = window.backend.window_process_id(live_info.hwnd)
+        if live_pid is None:
+            raise RuntimeConfigurationError("live input requires a readable Song PID")
         adapter = WindowsSendInputAdapter(
             window,
             Win32SendInputBackend(),
             enabled=True,
             allow_clicks=True,
             allow_keyboard=True,
+            expected_pid=live_pid,
+            auto_foreground=settings.auto_foreground,
+            restore_previous_foreground=settings.restore_previous_foreground,
+            foreground_stable_seconds=settings.foreground_stable_seconds,
+            foreground_timeout_seconds=settings.foreground_timeout_seconds,
         )
         executor = InputActionExecutor(adapter, translator=translator, observe_state=observe_state)
         verifier = SemanticStateVerifier(observe_state)

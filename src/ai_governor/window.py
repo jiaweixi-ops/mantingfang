@@ -36,6 +36,7 @@ class WindowBackend(Protocol):
     def window_title(self, hwnd: int) -> str: ...
     def process_name(self, pid: int | None) -> str | None: ...
     def window_dpi(self, hwnd: int) -> int: ...
+    def activate(self, hwnd: int) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -55,6 +56,28 @@ class WindowInfo:
             self.screen_left + round(self.client_width * x_ratio),
             self.screen_top + round(self.client_height * y_ratio),
         )
+
+
+@dataclass(frozen=True)
+class GeometrySnapshot:
+    hwnd: int
+    pid: int | None
+    client_width: int
+    client_height: int
+    screen_left: int
+    screen_top: int
+    dpi: int
+
+    def to_dict(self) -> dict[str, int | None]:
+        return {
+            "hwnd": self.hwnd,
+            "pid": self.pid,
+            "client_width": self.client_width,
+            "client_height": self.client_height,
+            "screen_left": self.screen_left,
+            "screen_top": self.screen_top,
+            "dpi": self.dpi,
+        }
 
 
 @dataclass(frozen=True)
@@ -117,6 +140,8 @@ class Win32WindowBackend:
         self.user32.ClientToScreen.restype = ctypes.c_int
         self.user32.GetForegroundWindow.argtypes = []
         self.user32.GetForegroundWindow.restype = ctypes.c_void_p
+        self.user32.SetForegroundWindow.argtypes = [ctypes.c_void_p]
+        self.user32.SetForegroundWindow.restype = wintypes.BOOL
         self.user32.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.POINTER(wintypes.DWORD)]
         self.user32.GetWindowThreadProcessId.restype = wintypes.DWORD
         self.user32.GetWindowTextLengthW.argtypes = [ctypes.c_void_p]
@@ -197,6 +222,10 @@ class Win32WindowBackend:
         get_dpi.restype = wintypes.UINT
         return int(get_dpi(ctypes.c_void_p(hwnd))) or 96
 
+    def activate(self, hwnd: int) -> None:
+        if not self.user32.SetForegroundWindow(ctypes.c_void_p(hwnd)):
+            raise WindowError(f"SetForegroundWindow failed: {ctypes.get_last_error()}")
+
 
 @dataclass
 class SteamWindowAdapter:
@@ -227,6 +256,41 @@ class SteamWindowAdapter:
             )
         return info
 
+    def ensure_foreground(
+        self,
+        info: WindowInfo | None = None,
+        *,
+        timeout_seconds: float = 5.0,
+        stable_seconds: float = 0.6,
+        poll_seconds: float = 0.1,
+    ) -> tuple[WindowInfo, int | None]:
+        """Activate the game only for an explicitly opted-in live action."""
+        info = info or self.locate(restore_minimized=True)
+        previous = self.backend.foreground_window()
+        if previous != info.hwnd:
+            activate = getattr(self.backend, "activate", None)
+            if not callable(activate):
+                raise WindowError("AUTO_FOREGROUND_FAILED: backend cannot activate windows")
+            activate(info.hwnd)
+        stable = self.wait_for_foreground(
+            timeout_seconds=timeout_seconds,
+            stable_seconds=stable_seconds,
+            poll_seconds=poll_seconds,
+        )
+        return stable, previous if previous != info.hwnd else None
+
+    def restore_foreground(self, hwnd: int | None) -> None:
+        if hwnd is None:
+            return
+        activate = getattr(self.backend, "activate", None)
+        if callable(activate):
+            try:
+                activate(hwnd)
+            except WindowError:
+                # Restoring focus is best effort and must never affect the
+                # already-completed game action.
+                return
+
     def foreground_diagnostic(self, info: WindowInfo | None = None) -> ForegroundDiagnostic:
         info = info or self.locate()
         foreground_hwnd = self.backend.foreground_window()
@@ -248,6 +312,18 @@ class SteamWindowAdapter:
             foreground_matches_game_hwnd=matches,
             same_process=same_process,
             flags=flags,
+        )
+
+    def geometry_snapshot(self, info: WindowInfo | None = None) -> GeometrySnapshot:
+        info = info or self.locate()
+        return GeometrySnapshot(
+            hwnd=info.hwnd,
+            pid=self.backend.window_process_id(info.hwnd),
+            client_width=info.client_width,
+            client_height=info.client_height,
+            screen_left=info.screen_left,
+            screen_top=info.screen_top,
+            dpi=self.backend.window_dpi(info.hwnd),
         )
 
     def wait_for_foreground(

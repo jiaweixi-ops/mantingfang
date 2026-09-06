@@ -13,12 +13,6 @@ PERSISTED_SETTINGS_KEYS = (
     "qwen_api_key",
     "qwen_vision_model",
     "qwen_reasoning_model",
-    # Retained only so existing local settings can be read without loss;
-    # runtime execution no longer selects DeepSeek.
-    "deepseek_api_base",
-    "deepseek_api_key",
-    "deepseek_vision_model",
-    "deepseek_reasoning_model",
 )
 
 
@@ -89,10 +83,11 @@ class Settings:
     qwen_reasoning_model: str | None = None
     runtime_bridge_url: str = "http://127.0.0.1:18765"
     runtime_telemetry_enabled: bool = False
-    deepseek_api_base: str = "https://api.deepseek.com"
-    deepseek_api_key: str | None = None
-    deepseek_vision_model: str | None = None
-    deepseek_reasoning_model: str | None = None
+    runtime_game_version: str | None = None
+    auto_foreground: bool = False
+    restore_previous_foreground: bool = True
+    foreground_stable_seconds: float = 0.6
+    foreground_timeout_seconds: float = 5.0
     feishu_app_id: str | None = None
     feishu_app_secret: str | None = None
     feishu_verification_token: str | None = None
@@ -123,10 +118,11 @@ class Settings:
             qwen_reasoning_model=configured("QWEN_REASONING_MODEL", "qwen_reasoning_model"),
             runtime_bridge_url=os.getenv("GOVERNOR_RUNTIME_BRIDGE_URL", cls.runtime_bridge_url).rstrip("/"),
             runtime_telemetry_enabled=_bool_env("GOVERNOR_RUNTIME_TELEMETRY"),
-            deepseek_api_base=(configured("DEEPSEEK_API_BASE", "deepseek_api_base", cls.deepseek_api_base) or cls.deepseek_api_base).rstrip("/"),
-            deepseek_api_key=configured("DEEPSEEK_API_KEY", "deepseek_api_key"),
-            deepseek_vision_model=configured("DEEPSEEK_VISION_MODEL", "deepseek_vision_model"),
-            deepseek_reasoning_model=configured("DEEPSEEK_REASONING_MODEL", "deepseek_reasoning_model"),
+            runtime_game_version=os.getenv("GOVERNOR_RUNTIME_GAME_VERSION") or None,
+            auto_foreground=_bool_env("GOVERNOR_AUTO_FOREGROUND"),
+            restore_previous_foreground=_bool_env("GOVERNOR_RESTORE_PREVIOUS_FOREGROUND", True),
+            foreground_stable_seconds=float(os.getenv("GOVERNOR_FOREGROUND_STABLE_SECONDS", "0.6")),
+            foreground_timeout_seconds=float(os.getenv("GOVERNOR_FOREGROUND_TIMEOUT_SECONDS", "5.0")),
             feishu_app_id=os.getenv("FEISHU_APP_ID") or None,
             feishu_app_secret=os.getenv("FEISHU_APP_SECRET") or None,
             feishu_verification_token=os.getenv("FEISHU_VERIFICATION_TOKEN") or None,

@@ -423,9 +423,11 @@ class ClientAreaCapture:
     backend: ClientCaptureBackend
     reject_near_black: bool = False
     last_diagnostic: CaptureDiagnostic | None = field(default=None, init=False)
+    last_info: WindowInfo | None = field(default=None, init=False)
 
     def capture(self, *, restore_minimized: bool = False) -> CapturedFrame:
         info: WindowInfo = self.window.locate(restore_minimized=restore_minimized)
+        self.last_info = info
         if info.minimized:
             raise CaptureError("game window is minimized")
         rgba = self.backend.capture_rgba(info.hwnd, info.client_width, info.client_height)
