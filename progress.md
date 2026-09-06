@@ -333,6 +333,13 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Local validation: `121 passed`, Python compileall PASS, and diff check PASS. CI artifact compilation is pending the pushed workflow run.
 - GitHub Actions run `34029235704` passed the no-op `net40` bootstrap build and uploaded the `DoorstopTelemetryBootstrap` artifact; all existing Python, Windows, and bridge-compile jobs also passed.
 
+## 2026-09-06 — Baseline start confirmed; debugger test awaits authorization
+
+- The user confirmed the restored game entered normally. Read-only inspection verified responsive `Song.exe` PID `29884` / HWND `26216382` and the expected installation path.
+- Doorstop configuration is still the exact pre-corlib baseline (`4D5C6DFA0F771C6A5B1B0C559ACA0BD0ECE7D08B08FFF894708DC3B73CE73CFC`), with blank `dll_search_path_override` and `debug_enabled=false`.
+- A new Preloader log repeats only the known BepInEx 5 `Module.GetPEKind` compatibility failure; `LogOutput.log` remains absent. The game itself is usable, while BepInEx remains unavailable.
+- Status: `READY_FOR_DOORSTOP_DEBUGGER_TEST`. The next step requires separate explicit authorization because it would change the Doorstop target/configuration. No bootstrap deployment, debugger activation, telemetry enablement, game input, save write, or memory write occurred.
+
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 
 - Fixed `TryReadResource` to use the cached reader instance instead of calling instance reflection from a static method.

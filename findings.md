@@ -178,6 +178,14 @@
 - Root cause is therefore a BepInEx 5.4.23.5 Preloader/Unity Mono compatibility failure, not a missing `winhttp.dll`, missing target assembly, or disabled Doorstop. `BepInEx/LogOutput.log`, `config/`, and `plugins/` were not generated.
 - The ignored evidence file is `data/probe/BEPINEX_BOOT_DIAGNOSTIC.json`. No verbose Doorstop replacement, configuration edit, SDK installation, Bridge build, plugin copy, telemetry enablement, or input occurred.
 
+## 2026-09-06 — Restored baseline game-start verification
+
+- After the user confirmed that the game entered normally, a read-only check found responsive `Song.exe` PID `29884`, HWND `26216382`, titled `Song`, started at `19:09:09` from the expected Steam installation directory.
+- `doorstop_config.ini` remains byte-for-byte at the pre-corlib baseline SHA-256 `4D5C6DFA0F771C6A5B1B0C559ACA0BD0ECE7D08B08FFF894708DC3B73CE73CFC`: its BepInEx Preloader target remains configured, corlib lookup override is blank, and Mono debugging remains disabled.
+- The configured `BepInEx\\unstripped_corlib` directory is absent; the reversible `unstripped_corlib.v2.3x4b-rollback` directory remains outside the configured lookup path.
+- A fresh `preloader_20260906_190909_776.log` still records the known BepInEx `Module.GetPEKind` `MissingMethodException`, and `BepInEx\\LogOutput.log` is absent. This confirms BepInEx remains incompatible, but does not prevent the user-confirmed normal game entry.
+- The project is `READY_FOR_DOORSTOP_DEBUGGER_TEST`: the CI-built bootstrap remains source/artifact-only, with no bootstrap DLL deployed, no debugger listener, no telemetry enablement, no input, and no save or memory write.
+
 ## 2026-09-06 — V2.3X4-B Exact Unity Corlib Compatibility Test preparation
 
 - Preserved the original `Song_Data\\Managed` core files. Before the override, hashes were: `mscorlib.dll` `FC5B144B...4EA92CB`, `System.dll` `1252E720...78044E8`, `System.Core.dll` `A9A106E0...B77FC37`; `netstandard.dll` was absent.
