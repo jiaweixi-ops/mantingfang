@@ -397,3 +397,15 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Changed type discovery to cache only successful `Type` resolutions, so an early startup miss can be retried later.
 - Added `runtime_bridge/compile-check/` with minimal BepInEx, Unity, and serializer stubs, and added a GitHub Actions `dotnet build` job that compiles the real bridge source files without installing or injecting the plugin.
 - Local Python verification is pending this phase; the local machine has .NET runtimes but no SDK, so the C# compile check will be verified by CI. No Live E2E, `arm-live`, game input, process-memory write, or secret file was used.
+## 2026-09-06 — V2.4A/B implementation started
+
+- Re-read the latest project thread and confirmed the requested transition: Mono Debugger research-only; implement read-only Build Menu state detection and structure parsing.
+- User constraint retained: Codex-only implementation, no DeepSeek Harness, no Live E2E, no `arm-live`, no SendInput, no save/process-memory writes, no Runtime Telemetry enablement, and no V2.5 placement.
+- Repository was clean at `c3889f197078075d88a4ae0db35eaf04e6f6d9c7` before this phase.
+
+## 2026-09-06 — V2.4A/B read-only model complete
+
+- Added `src/ai_governor/build_menu.py` with fail-closed state detection for closed/root/category/selected/unknown states.
+- Added strict category and building-option parsing, including confidence, normalized bboxes, locked flags, non-negative costs, and optional frame geometry snapshots.
+- Added six focused tests (including malformed structures and a no-Qwen/no-input boundary check); full suite is `132 passed`.
+- `compileall` and `git diff --check` pass. No game process, debugger, capture, model API, telemetry, or input path was invoked.

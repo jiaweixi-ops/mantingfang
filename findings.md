@@ -267,3 +267,10 @@
 - Default all execution to dry-run and require explicit configuration for real input injection.
 - Memory profiles are explicit JSON with process name, module, pointer size, pointer offsets, and scalar types; invalid profiles and missing processes fail closed.
 - Latest acceptance confirmed the V0.1 foundation is valid but only about 35–40% of the full automation goal. The first V0.2 integration task is the Steam Window Adapter; live input, screenshot capture, real profiles, loop, Feishu transport, and verification remain separate tasks.
+
+## 2026-09-06 — V2.4 navigation design boundary
+
+- The latest project decision is to archive Mono Debugger type-existence work as research-only after the single safe connect timeout; no debugger retry is authorized in this phase.
+- V2.4 starts with read-only Build Menu Navigation. The first implementation must model current-frame state and menu structure without invoking Qwen, input, telemetry, or live E2E.
+- Actionable elements remain fail-closed at confidence `>= 0.90`; stale calibration coordinates are not accepted by the new model.
+- The parser must preserve the frame geometry snapshot (HWND/PID/client size/origin/DPI/timestamp) so later resolver work can reject stale targets.

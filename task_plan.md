@@ -362,3 +362,13 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 - [x] Record the stopping phase and post-run safety state, then push and stop.
 
 Result: `FAIL_TIMEOUT_AT_CONNECT`. No type query was reached and no retry is authorized.
+
+## V2.4 Build Menu Navigation — read-only foundation
+
+- [x] Add a fail-closed build-menu state model for `UNKNOWN`, `CLOSED`, `ROOT_OPEN`, `CATEGORY_OPEN`, and `BUILDING_SELECTED`.
+- [x] Add strict parsing for current-frame categories, building options, lock state, costs, and frame geometry.
+- [x] Add unit tests for state evidence, malformed/low-confidence observations, geometry preservation, and locked/cost-bearing options.
+- [x] Keep the new module disconnected from Qwen, live input, E2E executors, telemetry, and V2.5 placement.
+- [ ] Run pytest, compileall, diff check, commit, push, and verify `HEAD == origin/main`.
+
+Scope decision: V2.3X4 Mono Debugger is research-only after the safe connect timeout; do not retry it while implementing V2.4.
