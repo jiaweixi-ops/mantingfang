@@ -125,6 +125,8 @@ Safety contract: SendInput, keyboard/mouse input, map clicks, save writes, memor
 Current blocker: the first read-only run found `UNKNOWN` instead of `CATEGORY_OPEN` at the baseline and stopped before the manual-selection prompt. Do not reuse that frame; wait for a fresh user-held ordinary category page.
 
 Current real calibration result: placement state was detected with confidence `0.9648` and a fresh cancel candidate at `0.98`, but the post-manual-cancel frame was `UNKNOWN` and retained red candidates. The phase therefore remains fail-safe and is not accepted until cancellation is unambiguous.
+
+Additional diagnosis: a later baseline attempt captured the city scene with the persistent bottom quick-build toolbar, not the full Build Menu category panel. It correctly stopped as `UNKNOWN`; do not treat the bottom toolbar alone as `CATEGORY_OPEN`.
 - Exactly one `qwen3.8-flash` call; Max calls 0; no retry. V2.4E is not started.
 
 ## V0.2 Game Integration backlog from latest acceptance
