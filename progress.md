@@ -422,3 +422,4 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - The adapter reuses WGC, `PerceptionEngine`, `RegionCatalog`, existing BUILD_MENU_OPEN/TOGGLE/CLOSE roles, and current HWND/PID/geometry metadata.
 - Vision is bounded to one `qwen3.8-flash` calibration call per phase. Subsequent samples use fresh-frame local patch matching and current-frame bbox output; no prior bbox is used as an actionable target.
 - Added observer tests; local full suite is `135 passed`. Real-game sampling has not started yet.
+- Read-only preflight found no running `Song.exe`, so no WGC frame or Vision request was made. The calibration phase is waiting for the user to start the game and leave the Build Menu closed; no input or focus change was performed.
