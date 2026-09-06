@@ -186,6 +186,13 @@
 - Backed up `doorstop_config.ini` with before-hash `4D5C6DFA...3CE73CFC`, copied only the 15 official corlibs into the new `BepInEx\\unstripped_corlib` directory, and changed only `UnityMono.dll_search_path_override` to `BepInEx\\unstripped_corlib`. The after-hash is `5721896C...29FE277`; line diff confirms one setting changed.
 - The game was not restarted after the override. The next step is a user-launched read-only boot check; do not install Bridge, enable telemetry, or run input before that result.
 
+## 2026-09-06 — V2.3X4-B first restart read-only check
+
+- The restarted `Song.exe` is PID `25644`, responding, started at `18:52:18`, and loaded the game-root `WINHTTP.dll` plus the system module.
+- The configured override is present and unchanged: `dll_search_path_override=BepInEx\\unstripped_corlib`.
+- No new `preloader_*.log` was created, the existing preloader log remains the earlier `18:28:26` `GetPEKind` failure, `BepInEx\\LogOutput.log` is absent, and the latest `Player.log` was not updated after this restart. No new BepInEx/Chainloader evidence is available.
+- The game is therefore classified as `BEPINEX_BOOT=UNCONFIRMED_AFTER_CORLIB_OVERRIDE`, not PASS or `CORLIB_OVERRIDE_FAILED`; no further DLL substitutions or configuration changes are allowed without new evidence.
+
 - Use Python 3.11+ with a standard-library-first core to keep local/offline setup portable.
 - Use SQLite for durable local state and an append-only audit trail.
 - Use typed dataclasses and JSON validation at boundaries instead of passing arbitrary model output to an executor.

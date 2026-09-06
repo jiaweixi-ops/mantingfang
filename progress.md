@@ -320,6 +320,12 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - Backed up `doorstop_config.ini`, created `BepInEx\\unstripped_corlib`, copied the 15 official files, and changed only `dll_search_path_override`. `Song_Data\\Managed` was not overwritten.
 - Preparation is complete and intentionally paused before restart. Awaiting the user's next game launch for the read-only BepInEx boot verdict.
 
+## 2026-09-06 — V2.3X4-B restart check inconclusive
+
+- Read-only inspection after restart found responsive `Song.exe` PID `25644` with the game-root `WINHTTP.dll` loaded and the corlib override still present.
+- No fresh preloader log, BepInEx log, config directory, plugins directory, or updated Player.log was produced. The override cannot yet be classified as passing or failing; the phase remains blocked on fresh loader evidence.
+- No configuration change, file deletion, loader replacement, Bridge installation, telemetry enablement, input, save write, or memory write occurred.
+
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 
 - Fixed `TryReadResource` to use the cached reader instance instead of calling instance reflection from a static method.
