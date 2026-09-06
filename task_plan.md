@@ -358,5 +358,7 @@ Task 10 — Calibrate the first real read-only memory fields for the installed g
 ## V2.3X4-E2 flushed phase diagnostics
 
 - [x] Add only flushed markers around connect, assembly lookup, each exact type query, and disconnect.
-- [ ] Run the CI-built diagnostic artifact once with the same read-only constraints.
-- [ ] Record the stopping phase and post-run safety state, then push and stop.
+- [x] Run the CI-built diagnostic artifact once with the same read-only constraints; it stopped at `CONNECT_BEGIN` after the five-second timeout.
+- [x] Record the stopping phase and post-run safety state, then push and stop.
+
+Result: `FAIL_TIMEOUT_AT_CONNECT`. No type query was reached and no retry is authorized.

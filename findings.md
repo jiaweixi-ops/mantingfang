@@ -232,6 +232,13 @@
 - After timeout cleanup, `Song.exe` PID `30092` remained responsive, still owned the sole `127.0.0.1:10000` listener, and there were zero established debugger connections.
 - Verdict: `MONO_DEBUGGER_TYPE_EXISTENCE=FAIL_TIMEOUT_SAFE`. Static contract and client source confirm zero instance/field/property/value access, method invocation, breakpoint, suspend, write, telemetry, or game input. Ignored evidence is `data/probe/V2.3X4E/result.json`.
 
+## 2026-09-06 — V2.3X4-E2 connect-stage diagnosis
+
+- CI run `34031118319` passed all eight jobs and produced the diagnostic client from commit `cd31fa98fdb66a8799554b285753ffb4a9d20f76`. The artifact is 7,680 bytes with SHA-256 `86C1E8F273D1E3DD5EEBF7C3BA18D25857E9E458991B7176B127AAD6A4B0C84C`.
+- The single five-second attempt emitted exactly one flushed marker, `PHASE CONNECT_BEGIN`, then timed out inside `VirtualMachineManager.Connect(...)`. It never reached assembly lookup, any of the four type queries, or disconnect output; it was terminated and not retried.
+- Post-timeout safety checks passed: `Song.exe` PID `30092` remained responsive, retained the sole `127.0.0.1:10000` listener, and established connections were zero.
+- Verdict: `MONO_DEBUGGER_TYPE_EXISTENCE=FAIL_TIMEOUT_AT_CONNECT`. The issue is now localized to debugger connection/handshake timing or compatibility, not type lookup. Evidence is ignored at `data/probe/V2.3X4E/e2-result.json`.
+
 ## 2026-09-06 — V2.3X4-B Exact Unity Corlib Compatibility Test preparation
 
 - Preserved the original `Song_Data\\Managed` core files. Before the override, hashes were: `mscorlib.dll` `FC5B144B...4EA92CB`, `System.dll` `1252E720...78044E8`, `System.Core.dll` `A9A106E0...B77FC37`; `netstandard.dll` was absent.

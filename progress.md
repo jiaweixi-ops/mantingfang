@@ -384,6 +384,13 @@ Phase 5 — Verification and delivery. Local implementation is ready for Git rev
 - The user requested continuation after the safe E timeout. The diagnostic mutation is limited to flushed phase markers around connect, assembly location, each of the four exact type queries, and disconnect.
 - The same type-only operation contract remains in force; no additional debugger capability or retry is being added. The next execution will again be one connection with an outer timeout.
 
+## 2026-09-06 — V2.3X4-E2 completed safely
+
+- CI run `34031118319` passed and the exact diagnostic artifact was verified before execution.
+- The one allowed attempt timed out after five seconds with only `PHASE CONNECT_BEGIN`; no type query or disconnect marker was reached. The client was terminated and not retried.
+- The game remained responsive with PID `30092`, the listener stayed owned by that PID, and established connections were zero.
+- Result: `FAIL_TIMEOUT_AT_CONNECT`; type existence remains unverified. No later runtime-read phase was started.
+
 ## 2026-09-06 — V2.3X3 Bridge compile hardening
 
 - Fixed `TryReadResource` to use the cached reader instance instead of calling instance reflection from a static method.
